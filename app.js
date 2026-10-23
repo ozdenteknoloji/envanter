@@ -530,7 +530,7 @@ function irsaliyeEkle() {
     const f = el.querySelector('#irF'); if (f) f.onchange = () => { const fs = [...f.files]; if (fs.length) irsaliyeOku(fs); };
   });
 }
-async function kucult(blob) { try { const bmp = await createImageBitmap(blob); const sc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height)); if (sc >= 1 && blob.size < 1.2e6 && /jpeg|png|webp/.test(blob.type)) return blob; const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); return await new Promise(r => c.toBlob(r, 'image/jpeg', .8)); } catch (e) { return blob; } }
+async function kucult(blob) { try { const bmp = await createImageBitmap(blob); const sc = Math.min(1, 1280 / Math.max(bmp.width, bmp.height)); if (sc >= 1 && blob.size < 400e3 && /jpeg|webp/.test(blob.type)) return blob; const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); return await new Promise(r => c.toBlob(r, 'image/jpeg', .72)); } catch (e) { return blob; } }
 const b64 = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(blob); });
 function aiHata(code, msg) { const e = new Error(msg || code); e.code = code; return e; }
 // Hız için "düşünme" kapatılır; model desteklemiyorsa bir sonraki ayarla tekrar denenir.
@@ -567,7 +567,7 @@ const AI_MESAJ = { zaman: 'Gemini 40 saniyede cevap vermedi (iki kez denendi). �
 const eslKey = ad => ascii(ad).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 function eslesmeBul(ad) { const k = eslKey(ad); const u = S.eslesme[k]; return u && S.urunler[u] && S.urunler[u].aktif !== false ? u : null; }
 async function irsaliyeOku(dosyalar) {
-  const t0 = Date.now(); openSheet(`<h2>Okunuyor… <span id="okS" class="num" style="color:var(--mut);font-size:15px"></span></h2><p class="note">İrsaliye fotoğrafı okunuyor. Genelde 10–20 saniye sürer.</p><div class="bar"><i id="okB" style="width:5%;transition:width .9s linear"></i></div><div class="btns"><button class="btn alt" id="okV">Vazgeç</button></div>`);
+  const t0 = Date.now(); openSheet(`<h2>Okunuyor… <span id="okS" class="num" style="color:var(--mut);font-size:15px"></span></h2><p class="note" id="okA">Fotoğraf hazırlanıyor…</p><div class="bar"><i id="okB" style="width:5%;transition:width .9s linear"></i></div><div class="btns"><button class="btn alt" id="okV">Vazgeç</button></div>`);
   S.okumaIptal = { onabort: null }; const ip = S.okumaIptal; $('#okV').onclick = () => { ip.iptal = true; if (ip.onabort) ip.onabort(); };
   const zam = setInterval(() => { const sn = Math.round((Date.now() - t0) / 1000); const s1 = $('#okS'), b1 = $('#okB'); if (s1) s1.textContent = sn + ' sn'; if (b1) b1.style.width = Math.min(95, 5 + sn * 4) + '%'; }, 1000);
   try {
@@ -581,7 +581,10 @@ Kurallar:
 - miktar: kağıt irsaliyede "TÖB Miktarı" sütunu (ondalık virgülü noktaya çevir, 7,68 → 7.68); e-postada "Sevk Edilen" sütunundaki sayı (yoksa "Onaylanan").
 - urun eşleştirme örnekleri: "HAMUR 7" → "7 HAMUR", "PIZZA TABANI 10 (24LU) - T" → "10 TABAN", "GURME PATATES" → "PATATES", "CITIR TAVUK FINGER" → "FİNGERS", "SADE CUBUK MOZARELLA 250G" → "ÇUBUK MOZZARELLA", "HAMBURGER PILIC KOFTE 550 GR" → "KÖFTE", "RENDE ERITME PEYNIRI 1 KG" → "ERİTME PEYNİRİ", "CIKOLATALI SUFLE" → "SUFLE", "TAVUK PARCALARI (KICKERS)" → "TAVUK PARÇALARI".
 Ürün listemiz: ${urunAdlari.join(' | ')}`;
-    const parts = [{ text: prompt }]; for (const f of dosyalar) { const k = await kucult(f); parts.push({ inline_data: { mime_type: k.type || 'image/jpeg', data: await b64(k) } }); }
+    const parts = [{ text: prompt }]; let boyut = 0, ham = 0;
+    for (const f of dosyalar) { ham += f.size; const k = await kucult(f); boyut += k.size; parts.push({ inline_data: { mime_type: k.type || 'image/jpeg', data: await b64(k) } }); }
+    const kb = n => n > 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' MB' : Math.round(n / 1e3) + ' KB';
+    const okA = $('#okA'); if (okA) okA.innerHTML = `Gemini'ye gönderildi (${kb(boyut)}${ham > boyut * 1.2 ? `, fotoğraf ${kb(ham)} idi` : ''}), okunuyor… Genelde 5–15 saniye.`;
     const j = await gemini(parts); if (S.okumaIptal && S.okumaIptal.iptal) return;
     const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false && subedeGorunur(id, S.subeId)) adId[ascii(x.ad)] = id; });
     const kal = (j.kalemler || []).map(k => { const miktar = typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
