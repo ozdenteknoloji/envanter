@@ -120,7 +120,7 @@ function adlariDuzenle() {
   const mevcut = new Set(Object.values(S.urunler).map(x => x.ad)); const p = {};
   for (const [id, x] of Object.entries(S.urunler)) { const y = AD_DUZEN[x.ad]; if (y && !mevcut.has(y)) { p[`u.${id}.ad`] = y; mevcut.add(y); } }
   if (S.urunDuzen < 2 && Object.keys(S.urunler).length) { for (const [id, x] of Object.entries(S.urunler)) if (KOPYALAR.includes(x.ad) && x.aktif !== false) { p[`u.${id}.aktif`] = false; p[`u.${id}.kaldirma`] = new Date().toISOString(); } p.duzen = 2; }
-  let ek = 0; if (Object.keys(S.urunler).length) { let sira = Math.max(0, ...Object.values(S.urunler).map(x => x.sira ?? 0)); for (const y of YENI_URUNLER) if (!mevcut.has(y.ad)) { p[`u.${yeniId('u')}`] = { ...y, dara: null, sktGun: null, cozulmeGun: null, aktif: true, sira: ++sira }; mevcut.add(y.ad); ek++; } }
+  let ek = 0; if (Object.keys(S.urunler).length) { let sira = Math.max(0, ...Object.values(S.urunler).map(x => x.sira ?? 0)); for (const y of YENI_URUNLER) if (!mevcut.has(y.ad)) { p[`u.${yeniId('u')}`] = { ...y, sktGun: null, cozulmeGun: null, aktif: true, sira: ++sira }; mevcut.add(y.ad); ek++; } }
   const ad = Object.keys(p).filter(k => k.endsWith('.ad')).length;
   if (Object.keys(p).length) updateDoc(doc(db, 'genel', 'urunler'), p).then(() => toast([ad ? `${ad} ürün adı düzenlendi` : '', Object.keys(p).some(k => k.endsWith('.aktif')) ? 'kopya XL soslar kaldırıldı' : '', ek ? `${ek} yeni içecek eklendi` : ''].filter(Boolean).join(' · ') + '.')).catch(() => { adDuzenYapildi = false; });
 }
@@ -208,11 +208,16 @@ function kapsam(sb, tur) { // sayımda görünen konumlar ve satırlar
   return (sb.konumlar || []).map(k => ({ ...k, satirlar: (k.satirlar || []).filter(s => S.urunler[s.u] && S.urunler[s.u].aktif !== false && (tur !== 'gunluk' || gl.has(s.u))) })).filter(k => k.satirlar.length);
 }
 const deger = (sy, k, u) => (sy.v && sy.v[k] && sy.v[k][u]) || {};
-function prm(sy, u) { const p = (sy.p && sy.p[u]) || null; const ur = S.urunler[u] || {}; return { c: (p && p.c != null ? p.c : ur.koliIci) ?? 1, d: (p && p.d != null ? p.d : ur.dara) ?? 0 }; }
+const satirDara = s => s.d ?? S.urunler[s.u]?.dara ?? null; // şubenin konum satırındaki dara (eski kayıtlarda üründeki)
+function prm(sy, s, k) {
+  const p = (sy.p && sy.p[s.u]) || null; const ur = S.urunler[s.u] || {};
+  const dSy = sy.d && sy.d[k] && sy.d[k][s.u];
+  return { c: (p && p.c != null ? p.c : ur.koliIci) ?? 1, d: (dSy != null ? dSy : (p && p.d != null ? p.d : satirDara(s))) ?? 0 };
+}
 const sayildi = v => v.m != null || v.x != null;
 function satirToplam(sy, k, s) {
   const v = deger(sy, k, s.u); if (!sayildi(v)) return null;
-  const { c, d } = prm(sy, s.u); const m = v.m ?? 0, x = v.x ?? 0;
+  const { c, d } = prm(sy, s, k); const m = v.m ?? 0, x = v.x ?? 0;
   if (s.y === 'koli') return r6(m * (c || 1) + x);
   if (s.y === 'tarti') return r6((v.m == null || v.m === 0 ? 0 : m - (v.k ?? 1) * d) + x);
   return r6(m + x);
@@ -244,8 +249,9 @@ function sayimListesi() {
 async function sayimBaslat(tur) {
   const id = `${S.subeId}_${bugun()}_${tur}`;
   if (syBul(id)) return go({ syId: id });
-  const p = {}; for (const [u, x] of Object.entries(S.urunler)) p[u] = { c: x.koliIci ?? null, d: x.dara ?? null };
-  const data = { sube: S.subeId, tarih: bugun(), tur, basla: new Date().toISOString(), baslatan: benAd(), kim: benAd(), v: {}, t: {}, p };
+  const p = {}; for (const [u, x] of Object.entries(S.urunler)) p[u] = { c: x.koliIci ?? null };
+  const d = {}; for (const k of sube().konumlar || []) for (const s of k.satirlar || []) if (s.y === 'tarti') (d[k.id] ||= {})[s.u] = satirDara(s);
+  const data = { sube: S.subeId, tarih: bugun(), tur, basla: new Date().toISOString(), baslatan: benAd(), kim: benAd(), v: {}, t: {}, p, d };
   S.sayimlar.unshift({ id, ...data });
   setDoc(doc(db, 'sayimlar', id), data).catch(hata);
   go({ syId: id });
@@ -270,20 +276,21 @@ function editor() {
     const u = S.urunler[s.u]; const v = deger(sy, k.id, s.u); const cur = S.f.k === k.id && S.f.i === i; const tot = satirToplam(sy, k.id, s);
     const cell = (a, val, cls = '') => { const f = cur && S.f.a === a; const txt = f && S.buf != null ? S.buf : (a === 'k' ? yaz(val ?? 1) : yaz(val)); return `<span class="cell ${cls} ${f ? 'f' + (S.buf != null ? ' ty' : '') : ''} ${!f && val == null && a !== 'k' ? 'e' : ''}" data-i="${i}" data-a="${a}">${txt || (f ? '' : '–')}</span>`; };
     const ek = v.x != null || (cur && S.f.a === 'x') ? `<span class="ekx">+ ekstra ${cell('x', v.x)} ${u.birim === 'adet' ? 'adet' : 'kg'}</span>` : '';
-    const ipucu = s.y === 'koli' ? `×${yaz(prm(sy, s.u).c)}` : s.y === 'tarti' ? 'tartı' : '';
+    const ipucu = s.y === 'koli' ? `×${yaz(prm(sy, s, k.id).c)}` : s.y === 'tarti' ? 'tartı' : '';
     return `<tr class="${cur ? 'cur' : ''} ${sayildi(v) ? 'done' : ''}" data-i="${i}"><td class="n" data-i="${i}">${esc(u.ad)}<small>${ipucu}</small>${ek}</td>
       <td>${cell('m', v.m)}</td>${tartiVar ? `<td>${s.y === 'tarti' ? cell('k', v.k, 'kap') : ''}</td>` : ''}
       <td class="tot ${tot == null ? 'e' : tot < 0 ? 'neg' : ''}">${tot == null ? '–' : fmt(tot, u.birim)}<small>${u.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`;
   }).join('');
-  const cs = k.satirlar[S.f.i]; const cu = S.urunler[cs.u]; const pr = prm(sy, cs.u);
+  const cs = k.satirlar[S.f.i]; const cu = S.urunler[cs.u]; const pr = prm(sy, cs, k.id);
   let sol = `<b>${esc(cu.ad)}</b> · `;
   if (S.f.a === 'x') sol += `ekstra (${cu.birim === 'adet' ? 'adet' : 'kg'}) eklenir`;
   else if (S.f.a === 'k') sol += `kap sayısı`;
   else if (cs.y === 'koli') sol += `koli = ${yaz(pr.c)} ${cu.birim === 'adet' ? 'adet' : 'kg'}`;
   else if (cs.y === 'tarti') { const v = deger(sy, k.id, cs.u); sol += `dara ${yaz(pr.d)} kg` + (v.m != null ? ` · ${yaz(v.m)} − ${(v.k ?? 1) > 1 ? (v.k + '×') : ''}${yaz(pr.d)} = <b>${fmt(satirToplam(sy, k.id, cs) - (v.x ?? 0))}</b>` : ''); }
   else sol += 'adet sayılır';
-  const guncel = S.urunler[cs.u] || {}; const fark = sy.p && sy.p[cs.u] && ((cs.y === 'koli' && (guncel.koliIci ?? null) !== (sy.p[cs.u].c ?? null)) || (cs.y === 'tarti' && (guncel.dara ?? null) !== (sy.p[cs.u].d ?? null)));
-  if (fark) sol += ` · <a id="pGun">ayarlarda ${yaz(cs.y === 'koli' ? guncel.koliIci : guncel.dara)}, güncelle</a>`;
+  const guncel = S.urunler[cs.u] || {}; const yeniD = satirDara(cs);
+  const fark = (cs.y === 'koli' && sy.p && sy.p[cs.u] && (guncel.koliIci ?? null) !== (sy.p[cs.u].c ?? null)) || (cs.y === 'tarti' && (yeniD ?? 0) !== pr.d);
+  if (fark) sol += ` · <a id="pGun">ayarlarda ${yaz(cs.y === 'koli' ? guncel.koliIci : yeniD)}, güncelle</a>`;
   const sonraki = k.satirlar[S.f.i + 1] ? urunAd(k.satirlar[S.f.i + 1].u) : (ks[ks.findIndex(x => x.id === k.id) + 1] ? '→ ' + ks[ks.findIndex(x => x.id === k.id) + 1].ad : 'bitti');
   const ilr = ilerleme(sy, sb);
   $('#app').innerHTML = `<div class="ed">${ust(`${sb.ad} · ${TUR[sy.tur]} sayım`, { geri: true, alt: `${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır`, sag: `<button id="sonucBtn">Sonuç</button>` })}
@@ -301,7 +308,10 @@ function editor() {
     if (!S.ayarHazir) { S.ayarHazir = true; editor(); $('#kAyar').scrollIntoView({ inline: 'end', block: 'nearest' }); clearTimeout(S.ayarT); S.ayarT = setTimeout(() => { S.ayarHazir = false; if (S.syId) editor(); }, 2500); return; }
     clearTimeout(S.ayarT); S.ayarHazir = false; editor(); konumMenusu();
   };
-  const pg = $('#pGun'); if (pg) pg.onclick = () => { const g = S.urunler[cs.u]; sy.p[cs.u] = { c: g.koliIci ?? null, d: g.dara ?? null }; updateDoc(doc(db, 'sayimlar', sy.id), { ['p.' + cs.u]: sy.p[cs.u] }).catch(hata); editor(); };
+  const pg = $('#pGun'); if (pg) pg.onclick = () => {
+    if (cs.y === 'koli') { sy.p[cs.u] = { c: S.urunler[cs.u].koliIci ?? null }; updateDoc(doc(db, 'sayimlar', sy.id), { ['p.' + cs.u]: sy.p[cs.u] }).catch(hata); }
+    else { sy.d ||= {}; (sy.d[k.id] ||= {})[cs.u] = yeniD; updateDoc(doc(db, 'sayimlar', sy.id), { [`d.${k.id}.${cs.u}`]: yeniD }).catch(hata); }
+    editor(); };
 }
 function konumMenusu() {
   commitBuf(); const h = aktifHucre(); const sid = S.subeId; const k = (sube().konumlar || []).find(x => x.id === S.ek); if (!k) return; const sy = syBul(S.syId);
@@ -431,7 +441,7 @@ function ayarlar() {
     <div class="sec">Şubeler (${ids.length})</div><div class="card">${ids.map(id => { const s = S.subeler[id]; const n = (s.konumlar || []).reduce((t, k) => t + (k.satirlar || []).length, 0); return `<button class="row" data-sb="${id}"><div class="m"><b>${esc(s.ad)}${s.aktif === false ? ' <span class="tag">Kapalı</span>' : ''}</b><span>${(s.konumlar || []).length} konum · ${n} satır · haftalık sayım ${GUNU[s.haftalikGun ?? 6]}</span></div><span class="ch">›</span></button>`; }).join('')}
       <button class="row" id="yeniSube"><div class="m"><b style="color:var(--blue)">+ Yeni şube</b></div></button></div>
     <div class="sec">Bütün şubeler için ortak</div><div class="card">
-      <button class="row" id="gUrun"><div class="m"><b>Ürünler</b><span>${urunSay} ürün · koli içi, dara, SKT ve çözülme günleri</span></div><span class="ch">›</span></button>
+      <button class="row" id="gUrun"><div class="m"><b>Ürünler</b><span>${urunSay} ürün · koli içi, SKT ve çözülme günleri</span></div><span class="ch">›</span></button>
       <button class="row" id="seed2"><div class="m"><b>Excel'den ürün yükle</b><span>Serik Excel'indeki ürünler · olanlara dokunulmaz, eksikler eklenir</span></div><span class="ch">›</span></button>
       <button class="row" id="gKul"><div class="m"><b>Kullanıcılar</b><span>${S.kullanicilar.length} hesap</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
@@ -440,7 +450,7 @@ function ayarlar() {
   $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => go({ ar: 'urunler' }); $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
 }
 async function seedYukle() {
-  const { SEED } = await import('./seed.js?v=7');
+  const { SEED } = await import('./seed.js?v=8');
   const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => adId[x.ad] = id);
   const yeni = Object.values(SEED.urunler).filter(x => !adId[x.ad]).length;
   const geri = Object.values(SEED.urunler).filter(x => adId[x.ad] && S.urunler[adId[x.ad]].aktif === false).length;
@@ -504,14 +514,17 @@ function konumAyar(sid, kid) {
   const kaydet = sat => { const yeni = ks.map(x => x.id === kid ? { ...x, satirlar: sat } : x); s.konumlar = yeni; subeKaydet(sid, { konumlar: yeni }); };
   const sat = k.satirlar || [];
   $('#app').innerHTML = ust(k.ad, { geri: true, subeSecici: false, alt: `${s.ad} · ${sat.length} ürün` }) + `<div class="pad">
-    <p class="note" style="margin:0 0 8px">Sayımdaki sırayı raf sırasına göre sürükleyerek dizin. <b>Koli</b>: koli × koli içi · <b>Tartı</b>: brüt kg − kap darası · <b>Adet</b>: tek tek sayılır.</p>
-    <div class="card sl" id="ul">${sat.map((x, i) => { const u = S.urunler[x.u]; return `<div class="si"><span class="drag">≡</span><div class="nm">${esc(u?.ad || '(silinmiş ürün)')}<small>${x.y === 'koli' ? 'koli içi ' + yaz(u?.koliIci ?? 1) : x.y === 'tarti' ? 'dara ' + (u?.dara != null ? yaz(u.dara) + ' kg' : 'girilmemiş!') : 'adet'}</small></div>
+    <p class="note" style="margin:0 0 8px">Sayımdaki sırayı raf sırasına göre sürükleyerek dizin. <b>Koli</b>: koli × koli içi · <b>Tartı</b>: brüt kg − kap darası (bu şubeye özel, dokunup düzeltin) · <b>Adet</b>: tek tek sayılır.</p>
+    <div class="card sl" id="ul">${sat.map((x, i) => { const u = S.urunler[x.u]; return `<div class="si"><span class="drag">≡</span><div class="nm">${esc(u?.ad || '(silinmiş ürün)')}<small>${x.y === 'koli' ? 'koli içi ' + yaz(u?.koliIci ?? 1) : x.y === 'tarti' ? (satirDara(x) != null ? `<a class="dl" data-dara="${i}">kap darası ${yaz(satirDara(x))} kg ✎</a>` : `<a class="dl" data-dara="${i}" style="color:var(--red)">kap darası girilmemiş ✎</a>`) : 'adet'}</small></div>
       <span class="seg">${['koli', 'tarti', 'adet'].map(y => `<button data-i="${i}" data-y="${y}" class="${x.y === y ? 'on' : ''}">${YON[y]}</button>`).join('')}</span><button class="x" data-sil="${i}">✕</button></div>`; }).join('') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div>
     <div class="btns"><button class="btn" id="uEkle">+ Ürün ekle</button></div>
     <div class="btns"><button class="btn alt" id="kAd">Adını değiştir</button><button class="btn red" id="kSil">Konumu sil</button></div></div>`;
   bagla();
   $('#app').querySelectorAll('[data-y]').forEach(b => b.onclick = () => { const n = sat.map((x, i) => i === +b.dataset.i ? { ...x, y: b.dataset.y } : x); kaydet(n); render(); });
   $('#app').querySelectorAll('[data-sil]').forEach(b => b.onclick = () => { const n = sat.filter((x, i) => i !== +b.dataset.sil); kaydet(n); render(); });
+  $('#app').querySelectorAll('[data-dara]').forEach(a => a.onclick = () => { const i = +a.dataset.dara; const x = sat[i];
+    openSheet(`<h2>${esc(urunAd(x.u))}</h2><p class="note">${esc(s.ad)} · ${esc(k.ad)} kabının darası. Her şubenin kabı farklı olabilir; sadece bu şubeyi etkiler.</p><label class="field"><span>Kap darası (kg)</span><input id="dd" inputmode="decimal" value="${yaz(satirDara(x))}" placeholder="örn. 0,356"></label><div class="btns"><button class="btn" id="dk">Kaydet</button></div>`, el => {
+      el.querySelector('#dd').focus(); el.querySelector('#dk').onclick = () => { const v = sayiOku(el.querySelector('#dd').value); kaydet(sat.map((y, j) => j === i ? { ...y, d: v } : y)); closeSheet(); render(); }; }); });
   suruklenebilir($('#ul'), (a, b) => { const n = [...sat]; n.splice(b, 0, n.splice(a, 1)[0]); kaydet(n); render(); });
   $('#uEkle').onclick = () => urunSecici(sat.map(x => x.u), sec => { const n = [...sat, ...sec.map(u => ({ u, y: varsayilanYon(k, u) }))]; kaydet(n); render(); });
   $('#kAd').onclick = () => openSheet(`<h2>Konum adı</h2><label class="field"><span>Ad</span><input id="ka" value="${esc(k.ad)}"></label><div class="btns"><button class="btn" id="kk">Kaydet</button></div>`, el => { el.querySelector('#kk').onclick = () => { const ad = el.querySelector('#ka').value.trim(); if (!ad) return; subeKaydet(sid, { konumlar: ks.map(x => x.id === kid ? { ...x, ad } : x) }); closeSheet(); }; });
@@ -525,7 +538,7 @@ function urunSecici(haric, bitti) {
     el.querySelector('#ue').onclick = () => { closeSheet(); if (sec.size) bitti(liste.map(u => u.id).filter(id => sec.has(id))); };
   });
 }
-function varsayilanYon(k, u) { const x = S.urunler[u] || {}; if (ascii(k.ad).includes('make')) return x.dara != null ? 'tarti' : 'adet'; return x.koliIci != null ? 'koli' : 'adet'; }
+function varsayilanYon(k, u) { const x = S.urunler[u] || {}; if (ascii(k.ad).includes('make')) return x.birim === 'kg' ? 'tarti' : 'adet'; return x.koliIci != null ? 'koli' : 'adet'; }
 function konumaEkle(sid, kid, urunler) {
   const s = S.subeler[sid]; const yeni = (s.konumlar || []).map(k => k.id !== kid ? k : { ...k, satirlar: [...(k.satirlar || []), ...urunler.filter(u => !(k.satirlar || []).some(x => x.u === u)).map(u => ({ u, y: varsayilanYon(k, u) }))] });
   s.konumlar = yeni; return subeKaydet(sid, { konumlar: yeni });
@@ -580,7 +593,7 @@ function urunlerAyar() {
   const tum = urunlerSirali(); const l = tum.filter(u => u.aktif !== false); const kalk = tum.filter(u => u.aktif === false); const kullanim = {}; Object.values(S.subeler).forEach(s => subedekiUrunler(s).forEach(u => kullanim[u] = (kullanim[u] || 0) + 1));
   $('#app').innerHTML = ust('Ürünler', { geri: true, subeSecici: false, alt: `${l.length} ürün · bütün şubeler için ortak` }) + `<div class="pad">
     <div class="btns" style="margin:0 0 10px"><button class="btn" id="uYeni">+ Yeni ürün</button><button class="btn alt" id="uExcel">Excel'den yükle</button></div>
-    <input class="search" id="ua" placeholder="Ara…"><div class="card">${l.map(u => `<button class="row" data-u="${u.id}" data-ad="${esc(ascii(u.ad))}"><div class="m"><b>${esc(u.ad)}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''}${u.dara != null ? ' · dara ' + yaz(u.dara) : ''} · ${kullanim[u.id] || 0} şube</span></div>${u.sktGun ? `<span class="tag a">SKT ${u.sktGun} gün</span>` : ''}</button>`).join('')}</div>
+    <input class="search" id="ua" placeholder="Ara…"><div class="card">${l.map(u => `<button class="row" data-u="${u.id}" data-ad="${esc(ascii(u.ad))}"><div class="m"><b>${esc(u.ad)}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''} · ${kullanim[u.id] || 0} şube</span></div>${u.sktGun ? `<span class="tag a">SKT ${u.sktGun} gün</span>` : ''}</button>`).join('')}</div>
     ${kalk.length ? `<details class="card" style="padding:0"><summary class="row" style="list-style:none"><div class="m"><b>Kaldırılan ürünler (${kalk.length})</b><span>Sayımlarda ve listelerde görünmezler · dokunup geri alabilirsiniz</span></div><span class="ch">▾</span></summary>${kalk.map(u => `<button class="row" data-u="${u.id}" data-ad="${esc(ascii(u.ad))}"><div class="m"><b style="color:var(--mut)">${esc(u.ad)}</b><span>${u.kaldirma ? 'kaldırıldı ' + trTarih(u.kaldirma.slice(0, 10)) : 'kaldırıldı'}</span></div></button>`).join('')}</details>` : ''}</div>`;
   bagla();
   $('#ua').oninput = e => { const q = ascii(e.target.value); $('#app').querySelectorAll('[data-ad]').forEach(l => l.hidden = q && !l.dataset.ad.includes(q)); };
@@ -588,16 +601,15 @@ function urunlerAyar() {
   $('#uYeni').onclick = () => urunPanel(null); $('#uExcel').onclick = seedYukle;
 }
 function urunPanel(id) {
-  const u = id ? S.urunler[id] : { ad: '', birim: 'kg', koliIci: null, dara: null, sktGun: null, cozulmeGun: null, aktif: true };
+  const u = id ? S.urunler[id] : { ad: '', birim: 'kg', koliIci: null, sktGun: null, cozulmeGun: null, aktif: true };
   const n = v => v == null ? '' : yaz(v);
   openSheet(`<h2>${id ? 'Ürünü düzenle' : 'Yeni ürün'}</h2>
     <label class="field"><span>Ürün adı</span><input id="pa" value="${esc(u.ad)}"></label>
     <div class="grid2"><label class="field"><span>Birim</span><select id="pb"><option value="kg" ${u.birim === 'kg' ? 'selected' : ''}>kg</option><option value="adet" ${u.birim === 'adet' ? 'selected' : ''}>adet</option></select></label>
     <label class="field"><span>Koli / paket içi</span><input id="pk" inputmode="decimal" value="${n(u.koliIci)}" placeholder="örn. 0,5"></label>
-    <label class="field"><span>Kap darası (kg)</span><input id="pd" inputmode="decimal" value="${n(u.dara)}" placeholder="Makeline tartısı"></label>
     <label class="field"><span>SKT (gün)</span><input id="ps" inputmode="numeric" value="${n(u.sktGun)}" placeholder="takip yoksa boş"></label>
     <label class="field"><span>Çözülme (gün)</span><input id="pc" inputmode="numeric" value="${n(u.cozulmeGun)}" placeholder="yoksa boş"></label></div>
-    <p class="note">Koli içi ya da dara değişince yeni sayımlar yeni değerle hesaplanır; eski sayımlar eski değerle kalır.</p>
+    <p class="note">Koli içi değişince yeni sayımlar yeni değerle hesaplanır; eski sayımlar eski değerle kalır. Makeline kap darası her şubede farklı olabileceği için şube ayarında, konum sayfasında girilir.</p>
     <div class="err" id="pe"></div><div class="btns"><button class="btn" id="pk2">${u.aktif === false ? 'Kaydet ve geri al' : 'Kaydet'}</button></div>
     ${id && u.aktif !== false ? `<div class="btns"><button class="btn red" id="pSil">Ürünü kaldır</button></div><p class="note">Kaldırınca bütün şubelerin bütün konumlarından, sonuç sırasından ve günlük listeden çıkar. Geçmiş sayımlar bozulmaz.</p>` : ''}
     ${u.aktif === false ? `<p class="note">Geri alınan ürün konumlara kendiliğinden dönmez; şube ayarlarından tekrar eklersiniz.</p>` : ''}`, el => {
@@ -606,7 +618,8 @@ function urunPanel(id) {
       const ad = el.querySelector('#pa').value.trim().toLocaleUpperCase('tr-TR'); if (!ad) return el.querySelector('#pe').textContent = 'Ürün adı yazın.';
       if (Object.entries(S.urunler).some(([k, x]) => k !== id && x.ad === ad)) return el.querySelector('#pe').textContent = 'Bu adda ürün zaten var.';
       const ni = v => { const x = sayiOku(v); return x == null ? null : Math.round(x); };
-      const data = { ad, birim: el.querySelector('#pb').value, koliIci: sayiOku(el.querySelector('#pk').value), dara: sayiOku(el.querySelector('#pd').value), sktGun: ni(el.querySelector('#ps').value), cozulmeGun: ni(el.querySelector('#pc').value), aktif: true };
+      const data = { ad, birim: el.querySelector('#pb').value, koliIci: sayiOku(el.querySelector('#pk').value), sktGun: ni(el.querySelector('#ps').value), cozulmeGun: ni(el.querySelector('#pc').value), aktif: true };
+      if (id && u.dara != null) data.dara = u.dara;
       const yid = id || yeniId('u'); if (!id) data.sira = Math.max(0, ...Object.values(S.urunler).map(x => x.sira ?? 0)) + 1; else data.sira = u.sira ?? 999;
       try { if (Object.keys(S.urunler).length) await updateDoc(doc(db, 'genel', 'urunler'), { ['u.' + yid]: data }); else await setDoc(doc(db, 'genel', 'urunler'), { u: { [yid]: data } }); closeSheet(); toast('Kaydedildi.'); } catch (e) { hata(e); }
     };
