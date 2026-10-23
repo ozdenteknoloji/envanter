@@ -416,18 +416,29 @@ function ayarlar() {
       <button class="row" id="yeniSube"><div class="m"><b style="color:var(--blue)">+ Yeni şube</b></div></button></div>
     <div class="sec">Bütün şubeler için ortak</div><div class="card">
       <button class="row" id="gUrun"><div class="m"><b>Ürünler</b><span>${urunSay} ürün · koli içi, dara, SKT ve çözülme günleri</span></div><span class="ch">›</span></button>
+      <button class="row" id="seed2"><div class="m"><b>Excel'den ürün yükle</b><span>Serik Excel'indeki ürünler · olanlara dokunulmaz, eksikler eklenir</span></div><span class="ch">›</span></button>
       <button class="row" id="gKul"><div class="m"><b>Kullanıcılar</b><span>${S.kullanicilar.length} hesap</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
-  const sd = $('#seed'); if (sd) sd.onclick = seedYukle;
+  const sd = $('#seed'); if (sd) sd.onclick = seedYukle; $('#seed2').onclick = seedYukle;
   $('#app').querySelectorAll('[data-sb]').forEach(b => b.onclick = () => go({ ar: 'sube:' + b.dataset.sb }));
   $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => go({ ar: 'urunler' }); $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
 }
 async function seedYukle() {
-  const { SEED } = await import('./seed.js?v=1');
-  if (Object.keys(S.urunler).length && !(await onayla('Ürün listesi dolu. Üzerine yazılsın mı?'))) return;
-  const b = writeBatch(db); b.set(doc(db, 'genel', 'urunler'), { u: SEED.urunler });
-  if (!S.subeler.serik) b.set(doc(db, 'subeler', 'serik'), { ...SEED.sube, aktif: true });
-  try { await b.commit(); toast('Serik verisi yüklendi.'); } catch (e) { hata(e); }
+  const { SEED } = await import('./seed.js?v=2');
+  const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => adId[x.ad] = id);
+  const yeni = Object.values(SEED.urunler).filter(x => !adId[x.ad]).length;
+  const geri = Object.values(SEED.urunler).filter(x => adId[x.ad] && S.urunler[adId[x.ad]].aktif === false).length;
+  const serikBos = !S.subeler.serik || !(S.subeler.serik.konumlar || []).some(k => (k.satirlar || []).length);
+  if (!(await onayla(`Serik Excel'inden <b>${yeni}</b> yeni ürün eklenecek${geri ? `, kaldırılmış <b>${geri}</b> ürün geri alınacak` : ''}. Listede zaten olan ürünlere dokunulmaz.${serikBos ? '<br><br>Serik şubesinin 6 konumu, hangi ürünün nerede sayıldığı ve sonuç sırası da Excel\'deki gibi kurulacak.' : ''}`, 'Yükle'))) return;
+  const eslem = {}; const ekle = {}; const sira0 = Math.max(0, ...Object.values(S.urunler).map(x => x.sira ?? 0)) + 1;
+  Object.entries(SEED.urunler).forEach(([sid, x], i) => {
+    const var_ = adId[x.ad];
+    if (var_) { eslem[sid] = var_; if (S.urunler[var_].aktif === false) { const e = S.urunler[var_]; const dolu = Object.fromEntries(Object.entries(e).filter(([, v]) => v != null && v !== '')); ekle[var_] = { ...x, ...dolu, aktif: true, kaldirma: null }; } return; }
+    let id = sid; if (S.urunler[id]) id = yeniId('u'); eslem[sid] = id; ekle[id] = { ...x, sira: Object.keys(S.urunler).length ? sira0 + i : x.sira };
+  });
+  const b = writeBatch(db); b.set(doc(db, 'genel', 'urunler'), { u: ekle }, { merge: true });
+  if (serikBos) { const m = u => eslem[u] || u; b.set(doc(db, 'subeler', 'serik'), { ad: S.subeler.serik?.ad || 'Serik', aktif: true, haftalikGun: S.subeler.serik?.haftalikGun ?? SEED.sube.haftalikGun, gunluk: S.subeler.serik?.gunluk || [], konumlar: SEED.sube.konumlar.map(k => ({ ...k, satirlar: k.satirlar.map(x => ({ ...x, u: m(x.u) })) })), sonuc: SEED.sube.sonuc.map(m) }, { merge: true }); }
+  try { await b.commit(); toast(`Excel'den ${yeni} ürün yüklendi.`); } catch (e) { hata(e); }
 }
 function yeniSube() {
   openSheet(`<h2>Yeni şube</h2><label class="field"><span>Şube adı</span><input id="sa" placeholder="Örn. Belek"></label>
@@ -552,13 +563,13 @@ function gunlukAyar(sid) {
 function urunlerAyar() {
   const tum = urunlerSirali(); const l = tum.filter(u => u.aktif !== false); const kalk = tum.filter(u => u.aktif === false); const kullanim = {}; Object.values(S.subeler).forEach(s => subedekiUrunler(s).forEach(u => kullanim[u] = (kullanim[u] || 0) + 1));
   $('#app').innerHTML = ust('Ürünler', { geri: true, subeSecici: false, alt: `${l.length} ürün · bütün şubeler için ortak` }) + `<div class="pad">
-    <div class="btns" style="margin:0 0 10px"><button class="btn" id="uYeni">+ Yeni ürün</button></div>
+    <div class="btns" style="margin:0 0 10px"><button class="btn" id="uYeni">+ Yeni ürün</button><button class="btn alt" id="uExcel">Excel'den yükle</button></div>
     <input class="search" id="ua" placeholder="Ara…"><div class="card">${l.map(u => `<button class="row" data-u="${u.id}" data-ad="${esc(ascii(u.ad))}"><div class="m"><b>${esc(u.ad)}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''}${u.dara != null ? ' · dara ' + yaz(u.dara) : ''} · ${kullanim[u.id] || 0} şube</span></div>${u.sktGun ? `<span class="tag a">SKT ${u.sktGun} gün</span>` : ''}</button>`).join('')}</div>
     ${kalk.length ? `<details class="card" style="padding:0"><summary class="row" style="list-style:none"><div class="m"><b>Kaldırılan ürünler (${kalk.length})</b><span>Sayımlarda ve listelerde görünmezler · dokunup geri alabilirsiniz</span></div><span class="ch">▾</span></summary>${kalk.map(u => `<button class="row" data-u="${u.id}" data-ad="${esc(ascii(u.ad))}"><div class="m"><b style="color:var(--mut)">${esc(u.ad)}</b><span>${u.kaldirma ? 'kaldırıldı ' + trTarih(u.kaldirma.slice(0, 10)) : 'kaldırıldı'}</span></div></button>`).join('')}</details>` : ''}</div>`;
   bagla();
   $('#ua').oninput = e => { const q = ascii(e.target.value); $('#app').querySelectorAll('[data-ad]').forEach(l => l.hidden = q && !l.dataset.ad.includes(q)); };
   $('#app').querySelectorAll('[data-u]').forEach(b => b.onclick = () => urunPanel(b.dataset.u));
-  $('#uYeni').onclick = () => urunPanel(null);
+  $('#uYeni').onclick = () => urunPanel(null); $('#uExcel').onclick = seedYukle;
 }
 function urunPanel(id) {
   const u = id ? S.urunler[id] : { ad: '', birim: 'kg', koliIci: null, dara: null, sktGun: null, cozulmeGun: null, aktif: true };
