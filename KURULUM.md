@@ -4,7 +4,7 @@ Uygulama, Firebase'de (giriş + veritabanı) çalışan bir web uygulamasıdır.
 
 | Hesap | Görebildiği |
 |---|---|
-| Şube hesabı | Kendi şube(ler)inin sayımları ve sonuçları. Şube müdürü ve vardiya sorumlusu aynı hesabı kullanabilir. Birden fazla şubeye bakan kişiye birden çok şube verilir; girişte şube seçer. |
+| Şube hesabı | Kendi şube(ler)inin sayımları ve sonuçları. Ayarlar sekmesinden (iki dokunuşla) sadece kendi şubesinin ürün yerlerini, konum sıralarını, sonuç sırasını, günlük listesini ve şubeye özel koli içini düzenler; bir ürünü sadece kendi şubesinden çıkarabilir. Şube müdürü ve vardiya sorumlusu aynı hesabı kullanabilir. Birden fazla şubeye bakan kişiye birden çok şube verilir; girişte şube seçer. |
 | Yönetici (admin) | Her şey: ürünler, şube ayarları, kullanıcılar. |
 
 ## 1. Firebase

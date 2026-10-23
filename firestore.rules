@@ -38,10 +38,13 @@ service cloud.firestore {
       allow write: if admin();
     }
 
-    // Şube ayarları (konumlar, sonuç sırası, günlük liste): şube hesabı kendi şubesini okur, sadece yönetici değiştirir.
+    // Şube ayarları: yönetici her şeyi değiştirir. Şube hesabı kendi şubesinde sadece konumlar,
+    // sonuç sırası, günlük liste ve şubeye özel koli içini değiştirebilir (adı, günü, açık/kapalı değil).
     match /subeler/{s} {
       allow read: if subede(s);
       allow write: if admin();
+      allow update: if subede(s)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['konumlar', 'sonuc', 'gunluk', 'koliIci']);
     }
 
     // Sayımlar: belge adı "şube_tarih_tür". Şube hesabı sadece kendi şubesinin sayımlarını görür ve yazar.

@@ -134,17 +134,20 @@ function render() {
   if (S.me.aktif === false) { app.innerHTML = `<div class="login"><div class="card p"><h3>Hesap kapalı</h3><p class="note">Bu hesap devre dışı bırakılmış.</p><div class="btns"><button class="btn alt" id="cik">Çıkış</button></div></div></div>`; $('#cik').onclick = () => signOut(auth); $('#tabs').hidden = true; return; }
   if (S.syId) return editor();
   sekmeler();
-  if (S.tab === 'ayarlar' && admin()) return ayarlar();
+  if (S.tab === 'ayarlar') return ayarlar();
   if (!S.urunYuklendi) { app.innerHTML = ust('Envanter') + `<div class="empty"><b>Yükleniyor…</b></div>`; return; }
   if (!S.subeId) { app.innerHTML = ust('Envanter') + `<div class="empty"><b>Şube yok</b>${admin() ? 'Ayarlar → Şubeler bölümünden şube ekleyin.' : 'Hesabınıza şube atanmamış. Yöneticiye haber verin.'}</div>`; bagla(); return; }
   if (S.tab === 'sonuc') return sonucEkrani();
   return sayimListesi();
 }
 function sekmeler() {
-  const t = [['sayim', '▦', 'Sayım'], ['sonuc', '☰', 'Sonuç']]; if (admin()) t.push(['ayarlar', '⚙', 'Ayarlar']);
+  const t = [['sayim', '▦', 'Sayım'], ['sonuc', '☰', 'Sonuç'], ['ayarlar', '⚙', S.tabHazir ? 'Tekrar dokun' : 'Ayarlar']];
   $('#tabs').hidden = false;
   $('#tabsIn').innerHTML = t.map(([k, i, a]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><i>${i}</i>${a}</button>`).join('');
-  $('#tabsIn').querySelectorAll('button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+  $('#tabsIn').querySelectorAll('button').forEach(b => b.onclick = () => {
+    // Şube hesabında yanlışlıkla ayara girilmesin: iki dokunuş
+    if (b.dataset.tab === 'ayarlar' && !admin() && S.tab !== 'ayarlar' && !S.tabHazir) { S.tabHazir = true; sekmeler(); clearTimeout(S.tabT); S.tabT = setTimeout(() => { S.tabHazir = false; sekmeler(); }, 2500); return; }
+    S.tabHazir = false; clearTimeout(S.tabT); setTab(b.dataset.tab); });
 }
 function ust(baslik, opt = {}) {
   const ids = subeIds(); const sb = sube();
@@ -272,7 +275,7 @@ function editor() {
   if (!S.f) { const i = k.satirlar.findIndex(s => !sayildi(deger(sy, k.id, s.u))); S.f = { k: k.id, i: i < 0 ? 0 : i, a: 'm' }; }
   const eskiScroll = $('#edlist')?.scrollTop ?? 0;
   const tartiVar = k.satirlar.some(s => s.y === 'tarti');
-  const ayarTus = admin() ? `<button class="kt ayar ${S.ayarHazir ? 'hazir' : ''}" id="kAyar">${S.ayarHazir ? '⚙ Tekrar dokun' : '⚙'}</button>` : '';
+  const ayarTus = true ? `<button class="kt ayar ${S.ayarHazir ? 'hazir' : ''}" id="kAyar">${S.ayarHazir ? '⚙ Tekrar dokun' : '⚙'}</button>` : '';
   const tabs = ks.map(x => { const n = x.satirlar.length, say = x.satirlar.filter(s => sayildi(deger(sy, x.id, s.u))).length; return `<button class="kt ${x.id === S.ek ? 'on' : ''} ${say === n ? 'ok' : ''}" data-k="${x.id}">${esc(x.ad)}<small>${say === n ? '✓' : say + '/' + n}</small></button>`; }).join('');
   const rows = k.satirlar.map((s, i) => {
     const u = S.urunler[s.u]; const v = deger(sy, k.id, s.u); const cur = S.f.k === k.id && S.f.i === i; const tot = satirToplam(sy, k.id, s);
@@ -429,6 +432,15 @@ async function sonucResmi(sy, sb, sira, disarida, tp) {
 /* ================= Ayarlar (sadece yönetici) ================= */
 function ayarlar() {
   const r = S.ar || ''; const [sayfa, a1, a2] = r.split(':');
+  if (!admin()) { // şube hesabı: sadece kendi şubesinin konum ve listeleri
+    const izin = id => (S.me.subeler || []).includes(id);
+    if (sayfa === 'konum' && izin(a1)) return konumAyar(a1, a2);
+    if (sayfa === 'sonucsira' && izin(a1)) return sonucSiraAyar(a1);
+    if (sayfa === 'gunluk' && izin(a1)) return gunlukAyar(a1);
+    if (sayfa === 'yerler' && izin(a1)) return yerlerAyar(a1);
+    if (!S.subeId) { $('#app').innerHTML = ust('Ayarlar') + '<div class="empty"><b>Şube yok</b></div>'; return bagla(); }
+    return subeAyar(S.subeId, true);
+  }
   if (sayfa === 'sube') return subeAyar(a1);
   if (sayfa === 'konum') return konumAyar(a1, a2);
   if (sayfa === 'sonucsira') return sonucSiraAyar(a1);
@@ -482,11 +494,12 @@ function yeniSube() {
   });
 }
 const subeKaydet = (id, patch) => setDoc(doc(db, 'subeler', id), patch, { merge: true }).catch(hata);
-function subeAyar(id) {
+function subeAyar(id, kok) {
   const s = S.subeler[id]; if (!s) { $('#app').innerHTML = ust('Şube', { geri: true }) + '<div class="empty"><b>Şube yok</b></div>'; return bagla(); }
-  const ks = s.konumlar || [];
-  $('#app').innerHTML = ust(s.ad, { geri: true, subeSecici: false, alt: 'Şube ayarları' }) + `<div class="pad">
-    <div class="card p"><div class="grid2"><label class="field"><span>Şube adı</span><input id="sAd" value="${esc(s.ad)}"></label>
+  const ks = s.konumlar || []; const yon = admin();
+  $('#app').innerHTML = ust(kok ? `${s.ad} · Ayarlar` : s.ad, { geri: !kok, subeSecici: !!kok, alt: kok ? `Haftalık sayım günü: ${GUNU[s.haftalikGun ?? 6]}` : 'Şube ayarları' }) + `<div class="pad">
+    ${kok ? `<p class="note" style="margin:0 0 8px">Bu ayarlar sadece ${esc(s.ad)} şubesini etkiler. Ürün listesine yeni ürünü yönetici ekler.</p>` : ''}
+    <div class="card p" ${yon ? '' : 'hidden'}><div class="grid2"><label class="field"><span>Şube adı</span><input id="sAd" value="${esc(s.ad)}"></label>
     <label class="field"><span>Haftalık sayım günü</span><select id="sHg">${GUNU.map((g, i) => `<option value="${i}" ${i === (s.haftalikGun ?? 6) ? 'selected' : ''}>${g}</option>`).join('')}</select></label></div>
     <label class="chk" style="padding:6px 0;border:0"><input type="checkbox" id="sAk" ${s.aktif !== false ? 'checked' : ''}> Şube açık</label></div>
     <div class="sec">Konumlar · sürükleyip sıralayın</div><div class="card sl" id="kl">${ks.map(k => `<div class="si"><span class="drag">≡</span><button class="row" style="padding:4px 0;border:0" data-k="${k.id}"><div class="m"><b>${esc(k.ad)}</b><span>${(k.satirlar || []).length} ürün</span></div><span class="ch">›</span></button></div>`).join('')}
@@ -495,8 +508,9 @@ function subeAyar(id) {
       <button class="row" id="sYer"><div class="m"><b>Ürün yerleri</b><span>Hangi ürün hangi konumda sayılır · tek ekranda</span></div><span class="ch">›</span></button>
       <button class="row" id="sSon"><div class="m"><b>Sonuç sırası</b><span>${(s.sonuc || []).length} ürün · Domino's sistemindeki sıra</span></div><span class="ch">›</span></button>
       <button class="row" id="sGun"><div class="m"><b>Günlük sayım listesi</b><span>${(s.gunluk || []).length} ürün</span></div><span class="ch">›</span></button></div>
-    <div class="sec">Diğer</div><div class="card"><button class="row" id="sKop"><div class="m"><b>Başka şubeden kopyala</b><span>Konumlar, sonuç sırası ve günlük liste değiştirilir</span></div><span class="ch">›</span></button></div></div>`;
+    <div class="sec" ${yon ? '' : 'hidden'}>Diğer</div><div class="card" ${yon ? '' : 'hidden'}><button class="row" id="sKop"><div class="m"><b>Başka şubeden kopyala</b><span>Konumlar, sonuç sırası ve günlük liste değiştirilir</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
+  if (!yon) { $('#sAd').disabled = $('#sHg').disabled = $('#sAk').disabled = true; }
   $('#sAd').onchange = e => { const v = e.target.value.trim(); if (v) subeKaydet(id, { ad: v }); };
   $('#sHg').onchange = e => subeKaydet(id, { haftalikGun: +e.target.value });
   $('#sAk').onchange = e => subeKaydet(id, { aktif: e.target.checked });
@@ -520,7 +534,7 @@ function konumAyar(sid, kid) {
     <div class="card sl" id="ul">${sat.map((x, i) => { const u = S.urunler[x.u]; return `<div class="si"><span class="drag">≡</span><div class="nm">${esc(u?.ad || '(silinmiş ürün)')}<small>${x.y === 'koli' ? `<a class="dl" data-koli="${x.u}">koli içi ${yaz(koliIci(sid, x.u) ?? 1)}${s.koliIci?.[x.u] != null ? ' · bu şubeye özel' : ''} ✎</a>` : x.y === 'tarti' ? (satirDara(x) != null ? `<a class="dl" data-dara="${i}">kap darası ${yaz(satirDara(x))} kg ✎</a>` : `<a class="dl" data-dara="${i}" style="color:var(--red)">kap darası girilmemiş ✎</a>`) : 'adet'}</small></div>
       <span class="seg">${['koli', 'tarti', 'adet'].map(y => `<button data-i="${i}" data-y="${y}" class="${x.y === y ? 'on' : ''}">${YON[y]}</button>`).join('')}</span><button class="x" data-sil="${i}">✕</button></div>`; }).join('') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div>
     <div class="btns"><button class="btn" id="uEkle">+ Ürün ekle</button></div>
-    <div class="btns"><button class="btn alt" id="kAd">Adını değiştir</button><button class="btn red" id="kSil">Konumu sil</button></div></div>`;
+    ${admin() ? `<div class="btns"><button class="btn alt" id="kAd">Adını değiştir</button><button class="btn red" id="kSil">Konumu sil</button></div>` : ''}</div>`;
   bagla();
   $('#app').querySelectorAll('[data-y]').forEach(b => b.onclick = () => { const n = sat.map((x, i) => i === +b.dataset.i ? { ...x, y: b.dataset.y } : x); kaydet(n); render(); });
   $('#app').querySelectorAll('[data-sil]').forEach(b => b.onclick = () => { const n = sat.filter((x, i) => i !== +b.dataset.sil); kaydet(n); render(); });
@@ -530,8 +544,8 @@ function konumAyar(sid, kid) {
       el.querySelector('#dd').focus(); el.querySelector('#dk').onclick = () => { const v = sayiOku(el.querySelector('#dd').value); kaydet(sat.map((y, j) => j === i ? { ...y, d: v } : y)); closeSheet(); render(); }; }); });
   suruklenebilir($('#ul'), (a, b) => { const n = [...sat]; n.splice(b, 0, n.splice(a, 1)[0]); kaydet(n); render(); });
   $('#uEkle').onclick = () => urunSecici(sat.map(x => x.u), sec => { const n = [...sat, ...sec.map(u => ({ u, y: varsayilanYon(k, u) }))]; kaydet(n); render(); }, sid);
-  $('#kAd').onclick = () => openSheet(`<h2>Konum adı</h2><label class="field"><span>Ad</span><input id="ka" value="${esc(k.ad)}"></label><div class="btns"><button class="btn" id="kk">Kaydet</button></div>`, el => { el.querySelector('#kk').onclick = () => { const ad = el.querySelector('#ka').value.trim(); if (!ad) return; subeKaydet(sid, { konumlar: ks.map(x => x.id === kid ? { ...x, ad } : x) }); closeSheet(); }; });
-  $('#kSil').onclick = async () => { if (!(await onayla(`"${k.ad}" konumu ve içindeki ${sat.length} ürün satırı silinecek. Geçmiş sayımlar etkilenmez.`, 'Sil'))) return; subeKaydet(sid, { konumlar: ks.filter(x => x.id !== kid) }); geri(); };
+  if (admin()) $('#kAd').onclick = () => openSheet(`<h2>Konum adı</h2><label class="field"><span>Ad</span><input id="ka" value="${esc(k.ad)}"></label><div class="btns"><button class="btn" id="kk">Kaydet</button></div>`, el => { el.querySelector('#kk').onclick = () => { const ad = el.querySelector('#ka').value.trim(); if (!ad) return; subeKaydet(sid, { konumlar: ks.map(x => x.id === kid ? { ...x, ad } : x) }); closeSheet(); }; });
+  if (admin()) $('#kSil').onclick = async () => { if (!(await onayla(`"${k.ad}" konumu ve içindeki ${sat.length} ürün satırı silinecek. Geçmiş sayımlar etkilenmez.`, 'Sil'))) return; subeKaydet(sid, { konumlar: ks.filter(x => x.id !== kid) }); geri(); };
 }
 function koliIciPanel(sid, u) {
   const s = S.subeler[sid]; const genel = S.urunler[u]?.koliIci; const oz = s.koliIci?.[u];
@@ -545,7 +559,7 @@ function koliIciPanel(sid, u) {
 }
 function urunSecici(haric, bitti, sid) {
   const hs = new Set(haric); const liste = urunlerSirali().filter(u => !hs.has(u.id) && u.aktif !== false && (!sid || subedeGorunur(u.id, sid))); const sec = new Set();
-  openSheet(`<h2>Ürün ekle</h2><input class="search" id="ua" placeholder="Ara…"><div class="card" id="ul" style="max-height:55vh;overflow:auto">${liste.map(u => `<label class="chk" data-ad="${esc(ascii(u.ad))}"><input type="checkbox" value="${u.id}"><span>${esc(u.ad)}</span></label>`).join('') || '<div class="empty" style="padding:20px">Eklenecek ürün kalmadı.</div>'}</div>${sid ? `<button class="btn alt sm" id="uOzel" style="margin-top:8px;width:100%">+ Listede yok: sadece ${esc(S.subeler[sid].ad)}'e özel yeni ürün</button>` : ''}<div class="btns"><button class="btn" id="ue">Ekle</button></div>`, el => {
+  openSheet(`<h2>Ürün ekle</h2><input class="search" id="ua" placeholder="Ara…"><div class="card" id="ul" style="max-height:55vh;overflow:auto">${liste.map(u => `<label class="chk" data-ad="${esc(ascii(u.ad))}"><input type="checkbox" value="${u.id}"><span>${esc(u.ad)}</span></label>`).join('') || '<div class="empty" style="padding:20px">Eklenecek ürün kalmadı.</div>'}</div>${sid && admin() ? `<button class="btn alt sm" id="uOzel" style="margin-top:8px;width:100%">+ Listede yok: sadece ${esc(S.subeler[sid].ad)}'e özel yeni ürün</button>` : ''}<div class="btns"><button class="btn" id="ue">Ekle</button></div>`, el => {
     el.querySelector('#ua').oninput = e => { const q = ascii(e.target.value); el.querySelectorAll('[data-ad]').forEach(l => l.hidden = q && !l.dataset.ad.includes(q)); };
     el.querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = () => { c.checked ? sec.add(c.value) : sec.delete(c.value); el.querySelector('#ue').textContent = sec.size ? `Ekle (${sec.size})` : 'Ekle'; });
     el.querySelector('#ue').onclick = () => { closeSheet(); if (sec.size) bitti(liste.map(u => u.id).filter(id => sec.has(id))); };
@@ -585,15 +599,19 @@ function yerlerAyar(sid) {
   const eskiY = window.scrollY;
   $('#app').innerHTML = ust('Ürün yerleri', { geri: true, subeSecici: false, alt: `${s.ad} · ${l.length} ürün · ${ks.length} konum` }) + `<div class="pad">
     <p class="note" style="margin:0 0 8px">Konuma dokununca ürün o konumun sonuna eklenir, tekrar dokununca çıkar. Sırayı konum sayfasından sürükleyerek değiştirin.</p>
-    <div class="btns" style="margin:0 0 10px"><button class="btn alt" id="yOzel">+ Sadece ${esc(s.ad)}'e özel yeni ürün</button></div>
+    <div class="btns" style="margin:0 0 10px" ${admin() ? '' : 'hidden'}><button class="btn alt" id="yOzel">+ Sadece ${esc(s.ad)}'e özel yeni ürün</button></div>
     <input class="search" id="ya" placeholder="Ara…" value="${esc(q)}">
-    <div class="chips"><button class="chip ${f === 'hepsi' ? 'on' : ''}" data-f="hepsi">Hepsi</button><button class="chip ${f === 'yok' ? 'on' : ''}" data-f="yok">Hiçbir yerde olmayanlar (${yok})</button></div>
-    <div class="card">${l.map(u => `<div class="yr" data-ad="${esc(ascii(u.ad))}" ${gor(u) ? '' : 'hidden'} style="padding:10px 12px;border-bottom:1px solid var(--line)"><b style="font-size:14px">${esc(u.ad)}</b>${u.sube ? ' <span class="tag b">sadece bu şube</span>' : ''}${yer[u.id] ? '' : ' <span class="tag a">hiçbir yerde yok</span>'}
+    <div class="chips"><button class="chip ${f === 'hepsi' ? 'on' : ''}" data-f="hepsi">Hepsi</button><button class="chip ${f === 'yok' ? 'on' : ''}" data-f="yok">Bu şubede olmayanlar (${yok})</button></div>
+    <div class="card">${l.map(u => `<div class="yr" data-ad="${esc(ascii(u.ad))}" ${gor(u) ? '' : 'hidden'} style="padding:10px 12px;border-bottom:1px solid var(--line)"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1"><b style="font-size:14px">${esc(u.ad)}</b>${u.sube ? ' <span class="tag b">sadece bu şube</span>' : ''}${yer[u.id] ? '' : ' <span class="tag a">bu şubede yok</span>'}</div>${yer[u.id] || (s.sonuc || []).includes(u.id) ? `<button class="chip" style="padding:4px 9px;font-size:11.5px;color:var(--red);border-color:var(--red)" data-cik="${u.id}">Şubeden çıkar</button>` : ''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${ks.map(k => { const on = yer[u.id]?.has(k.id); return `<button class="chip ${on ? 'on' : ''}" style="padding:5px 9px;font-size:12px" data-u="${u.id}" data-k="${k.id}">${on ? '✓ ' : ''}${esc(k.ad)}</button>`; }).join('')}</div></div>`).join('') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div></div>`;
   bagla(); window.scrollTo(0, eskiY);
   $('#ya').oninput = e => { S.yerAra = e.target.value; const qq = ascii(e.target.value); $('#app').querySelectorAll('.yr').forEach(r => { const u = l.find(x => ascii(x.ad) === r.dataset.ad); r.hidden = !((f !== 'yok' || !yer[u?.id]) && (!qq || r.dataset.ad.includes(qq))); }); };
   $('#app').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.yerFiltre = b.dataset.f; render(); });
   $('#yOzel').onclick = () => urunPanel(null, { sube: sid });
+  $('#app').querySelectorAll('[data-cik]').forEach(b => b.onclick = async () => { const u = b.dataset.cik;
+    if (!(await onayla(`<b>${esc(urunAd(u))}</b> ${esc(s.ad)} şubesinin bütün konumlarından, sonuç sırasından ve günlük listesinden çıkacak. Diğer şubeler etkilenmez.`, 'Çıkar'))) return;
+    const kon = (s.konumlar || []).map(k => ({ ...k, satirlar: (k.satirlar || []).filter(x => x.u !== u) })); const son = (s.sonuc || []).filter(x => x !== u); const gun = (s.gunluk || []).filter(x => x !== u);
+    Object.assign(s, { konumlar: kon, sonuc: son, gunluk: gun }); subeKaydet(sid, { konumlar: kon, sonuc: son, gunluk: gun }); toast(`${urunAd(u)} ${s.ad}'den çıkarıldı.`); render(); });
   $('#app').querySelectorAll('.yr [data-u]').forEach(b => b.onclick = () => { const u = b.dataset.u, k = b.dataset.k; if (yer[u]?.has(k)) konumdanCikar(sid, k, u); else konumaEkle(sid, k, [u]); render(); });
 }
 function gunlukAyar(sid) {
