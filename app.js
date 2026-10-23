@@ -539,7 +539,7 @@ try { dusunmeI = +localStorage.getItem('env_dusunme') || 0; } catch (e) { }
 async function geminiCagir(model, key, parts) {
   for (;;) {
     const gc = { temperature: 0, responseMimeType: 'application/json' }; const th = DUSUNME[dusunmeI]; if (th) gc.thinkingConfig = th;
-    const ctl = new AbortController(); const zt = setTimeout(() => ctl.abort('zaman'), 40000); if (S.okumaIptal) S.okumaIptal.onabort = () => ctl.abort('iptal');
+    const ctl = new AbortController(); const zt = setTimeout(() => ctl.abort('zaman'), 30000); if (S.okumaIptal) S.okumaIptal.onabort = () => ctl.abort('iptal');
     let res; try { res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }) });
     } catch (e) { clearTimeout(zt); if (ctl.signal.reason === 'iptal') throw aiHata('iptal'); if (ctl.signal.aborted) throw aiHata('zaman'); throw aiHata('ag', e.message); }
     let j = null; try { j = await res.json(); } catch (e) { } clearTimeout(zt);
@@ -551,19 +551,32 @@ function geminiSonuc(res, j) {
   if (!res.ok) { const m = (j && j.error && j.error.message) || ''; if (res.status === 429) throw aiHata('rate', m); if (res.status === 404) throw aiHata('model', m); if (res.status >= 500) throw aiHata('yogun', m); if (res.status === 403 || (res.status === 400 && /api key/i.test(m))) throw aiHata('key', m); throw aiHata('http', m || ('HTTP ' + res.status)); }
   const t = ((j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('').trim(); if (!t) throw aiHata('bos'); return t;
 }
-async function flashModelBul(key) { const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } }); const j = await r.json().catch(() => ({})); const ms = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.replace(/^models\//, '')); return ms.find(n => n === 'gemini-flash-latest') || ms.filter(n => /flash/.test(n) && !/lite|image|tts|live|thinking|exp|preview/.test(n)).sort().reverse()[0] || null; }
-async function gemini(parts) {
-  const key = (S.ai.geminiKey || '').trim(); let model = (S.ai.model || '').trim() || 'gemini-2.5-flash'; let t;
-  try { t = await geminiCagir(model, key, parts); }
-  catch (e) {
-    let alt = null;
-    if (e.code === 'model') alt = await flashModelBul(key);
-    else if (e.code === 'zaman' || e.code === 'yogun') alt = 'gemini-2.5-flash-lite'; // yavaş/yoğunsa hafif modelle bir kez daha
-    if (!alt || alt === model) throw e; t = await geminiCagir(alt, key, parts);
-  }
-  try { return JSON.parse(t.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (e) { throw aiHata('json'); }
+// Model seçimi: Google eski modelleri yeni anahtarlara kapatabiliyor; büyük "flash" modelleri ücretsiz planda çok yavaş
+// kalabiliyor. Bu yüzden listeden en yeni hızlı "flash-lite" model seçilir ve telefonda hatırlanır.
+async function modelListesi(key) { const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } }); const j = await r.json().catch(() => ({})); return (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.replace(/^models\//, '')).filter(n => /gemini/.test(n) && !/image|tts|live|audio|embed|exp|preview|thinking/.test(n)); }
+const surumNo = n => { const m = n.match(/gemini-(\d+(?:\.\d+)?)/); return m ? +m[1] : 0; };
+async function modelAdaylari(key, haric = []) {
+  const ms = (await modelListesi(key)).filter(n => !haric.includes(n));
+  const lite = ms.filter(n => /flash-lite/.test(n)).sort((a, b) => surumNo(b) - surumNo(a) || a.length - b.length);
+  const flash = ms.filter(n => /flash/.test(n) && !/lite/.test(n)).sort((a, b) => surumNo(b) - surumNo(a) || a.length - b.length);
+  return [...lite, ...flash];
 }
-const AI_MESAJ = { zaman: 'Gemini 40 saniyede cevap vermedi (iki kez denendi). İnternet bağlantısını kontrol edip tekrar deneyin ya da irsaliyeyi elle girin.', yogun: 'Gemini şu an yoğun. Biraz sonra tekrar deneyin ya da elle girin.', ag: 'Gemini\'ye bağlanılamadı. İnternet bağlantısını kontrol edin.', iptal: 'Okuma iptal edildi.', rate: 'Gemini ücretsiz kullanım sınırına ulaşıldı. Bir dakika sonra tekrar deneyin.', key: 'Gemini anahtarı geçersiz. Yönetici Ayarlar → Fotoğraf okuma bölümünden kontrol etsin.', model: 'Gemini modeli bulunamadı. Ayarlarda model alanını boş bırakın.', json: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.', bos: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.' };
+async function gemini(parts) {
+  const key = (S.ai.geminiKey || '').trim(); const elle = (S.ai.model || '').trim();
+  let model = elle || (() => { try { return localStorage.getItem('env_model'); } catch (e) { return null; } })() || 'gemini-3.5-flash-lite';
+  const denenen = [];
+  for (let i = 0; i < 3; i++) {
+    try { const t = await geminiCagir(model, key, parts); if (!elle) { try { localStorage.setItem('env_model', model); } catch (e) { } }
+      try { return JSON.parse(t.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (e) { throw aiHata('json'); } }
+    catch (e) {
+      if (!['model', 'zaman', 'yogun'].includes(e.code)) throw e;
+      denenen.push(model); try { localStorage.removeItem('env_model'); } catch (x) { }
+      const alt = (await modelAdaylari(key, denenen).catch(() => []))[0]; if (!alt) throw e; model = alt; dusunmeI = 0;
+    }
+  }
+  throw aiHata('zaman');
+}
+const AI_MESAJ = { zaman: 'Gemini 30 saniyede cevap vermedi (başka modelle de denendi). İnternet bağlantısını kontrol edip tekrar deneyin ya da irsaliyeyi elle girin.', yogun: 'Gemini şu an yoğun. Biraz sonra tekrar deneyin ya da elle girin.', ag: 'Gemini\'ye bağlanılamadı. İnternet bağlantısını kontrol edin.', iptal: 'Okuma iptal edildi.', rate: 'Gemini ücretsiz kullanım sınırına ulaşıldı. Bir dakika sonra tekrar deneyin.', key: 'Gemini anahtarı geçersiz. Yönetici Ayarlar → Fotoğraf okuma bölümünden kontrol etsin.', model: 'Gemini modeli bulunamadı. Ayarlarda model alanını boş bırakın.', json: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.', bos: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.' };
 const eslKey = ad => ascii(ad).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 function eslesmeBul(ad) { const k = eslKey(ad); const u = S.eslesme[k]; return u && S.urunler[u] && S.urunler[u].aktif !== false ? u : null; }
 async function irsaliyeOku(dosyalar) {
@@ -584,7 +597,7 @@ Kurallar:
     const parts = [{ text: prompt }]; let boyut = 0, ham = 0;
     for (const f of dosyalar) { ham += f.size; const k = await kucult(f); boyut += k.size; parts.push({ inline_data: { mime_type: k.type || 'image/jpeg', data: await b64(k) } }); }
     const kb = n => n > 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' MB' : Math.round(n / 1e3) + ' KB';
-    const okA = $('#okA'); if (okA) okA.innerHTML = `Gemini'ye gönderildi (${kb(boyut)}${ham > boyut * 1.2 ? `, fotoğraf ${kb(ham)} idi` : ''}), okunuyor… Genelde 5–15 saniye.`;
+    const okA = $('#okA'); if (okA) okA.innerHTML = `Gemini'ye gönderildi (${kb(boyut)}${ham > boyut * 1.2 ? `, fotoğraf ${kb(ham)} idi` : ''}), okunuyor… Genelde birkaç saniye.`;
     const j = await gemini(parts); if (S.okumaIptal && S.okumaIptal.iptal) return;
     const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false && subedeGorunur(id, S.subeId)) adId[ascii(x.ad)] = id; });
     const kal = (j.kalemler || []).map(k => { const miktar = typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
@@ -639,7 +652,7 @@ function irsaliyeDuzen() {
 function aiPanel() {
   openSheet(`<h2>Fotoğraf okuma (Gemini)</h2><p class="note">İrsaliye fotoğraflarını okumak için ücretsiz Gemini API anahtarı. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> adresinden alıp yapıştırın. Şube hesapları da bu anahtarla irsaliye okutur.</p>
     <label class="field"><span>Gemini API anahtarı</span><input id="aK" type="password" autocomplete="off" value="${esc(S.ai.geminiKey || '')}" placeholder="AIza…"></label>
-    <label class="field"><span>Model (boş bırakabilirsiniz)</span><input id="aM" autocomplete="off" value="${esc(S.ai.model || '')}" placeholder="gemini-2.5-flash"></label>
+    <label class="field"><span>Model (boş bırakabilirsiniz)</span><input id="aM" autocomplete="off" value="${esc(S.ai.model || '')}" placeholder="otomatik (önerilen)"></label>
     <div class="err" id="aE"></div><div class="btns"><button class="btn alt" id="aT">Dene</button><button class="btn" id="aS">Kaydet</button></div>`, el => {
     el.querySelector('#aS').onclick = async () => { try { await setDoc(doc(db, 'genel', 'ai'), { geminiKey: el.querySelector('#aK').value.trim(), model: el.querySelector('#aM').value.trim() }, { merge: true }); closeSheet(); toast('Kaydedildi.'); } catch (e) { hata(e); } };
     el.querySelector('#aT').onclick = async () => { const er = el.querySelector('#aE'); er.style.color = 'var(--mut)'; er.textContent = 'Deneniyor…'; const eski = S.ai; S.ai = { geminiKey: el.querySelector('#aK').value.trim(), model: el.querySelector('#aM').value.trim() };
