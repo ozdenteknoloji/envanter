@@ -534,8 +534,8 @@ async function kucult(blob) { try { const bmp = await createImageBitmap(blob); c
 const b64 = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(blob); });
 function aiHata(code, msg) { const e = new Error(msg || code); e.code = code; return e; }
 // Hız için "düşünme" kapatılır; model desteklemiyorsa bir sonraki ayarla tekrar denenir.
-const DUSUNME = [{ thinkingBudget: 0 }, { thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }, null]; let dusunmeI = 0;
-try { dusunmeI = +localStorage.getItem('env_dusunme') || 0; } catch (e) { }
+const DUSUNME = [{ thinkingLevel: 'minimal' }, { thinkingBudget: 0 }, { thinkingLevel: 'low' }, null]; let dusunmeI = 0;
+try { dusunmeI = +localStorage.getItem('env_dusunme2') || 0; } catch (e) { }
 async function geminiCagir(model, key, parts) {
   for (;;) {
     const gc = { temperature: 0, responseMimeType: 'application/json' }; const th = DUSUNME[dusunmeI]; if (th) gc.thinkingConfig = th;
@@ -543,7 +543,7 @@ async function geminiCagir(model, key, parts) {
     let res; try { res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }) });
     } catch (e) { clearTimeout(zt); if (ctl.signal.reason === 'iptal') throw aiHata('iptal'); if (ctl.signal.aborted) throw aiHata('zaman'); throw aiHata('ag', e.message); }
     let j = null; try { j = await res.json(); } catch (e) { } clearTimeout(zt);
-    if (!res.ok && res.status === 400 && th && /think/i.test((j && j.error && j.error.message) || '')) { dusunmeI++; try { localStorage.setItem('env_dusunme', dusunmeI); } catch (e) { } continue; }
+    if (!res.ok && res.status === 400 && th && !/api key/i.test((j && j.error && j.error.message) || '')) { dusunmeI++; try { localStorage.setItem('env_dusunme2', dusunmeI); } catch (e) { } continue; }
     return geminiSonuc(res, j);
   }
 }
