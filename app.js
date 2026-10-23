@@ -283,9 +283,33 @@ function editor() {
   $('#app').querySelectorAll('.k').forEach(b => { b.addEventListener('pointerdown', e => { e.preventDefault(); tus(b.dataset.key); }); });
   const ka = $('#kAyar'); if (ka) ka.onclick = () => {
     if (!S.ayarHazir) { S.ayarHazir = true; editor(); $('#kAyar').scrollIntoView({ inline: 'end', block: 'nearest' }); clearTimeout(S.ayarT); S.ayarT = setTimeout(() => { S.ayarHazir = false; if (S.syId) editor(); }, 2500); return; }
-    clearTimeout(S.ayarT); S.ayarHazir = false; go({ tab: 'ayarlar', syId: null, ar: `konum:${S.subeId}:${S.ek}` });
+    clearTimeout(S.ayarT); S.ayarHazir = false; editor(); konumMenusu();
   };
   const pg = $('#pGun'); if (pg) pg.onclick = () => { const g = S.urunler[cs.u]; sy.p[cs.u] = { c: g.koliIci ?? null, d: g.dara ?? null }; updateDoc(doc(db, 'sayimlar', sy.id), { ['p.' + cs.u]: sy.p[cs.u] }).catch(hata); editor(); };
+}
+function konumMenusu() {
+  commitBuf(); const h = aktifHucre(); const sid = S.subeId; const k = (sube().konumlar || []).find(x => x.id === S.ek); if (!k) return; const sy = syBul(S.syId);
+  const cu = h && h.k.id === k.id ? h.s.u : null;
+  openSheet(`<h2>${esc(k.ad)}</h2><p class="note">Sayım kaldığı yerden devam eder.</p><div class="card" style="margin-top:12px">
+    <button class="row" id="mEkle"><div class="m"><b style="color:var(--blue)">+ ${esc(k.ad)}'e ürün ekle</b><span>Listeden seç, sona eklenir${sy.tur === 'gunluk' ? ' (günlük listeye de eklenir)' : ''}</span></div></button>
+    ${cu ? `<button class="row" id="mCik"><div class="m"><b>${esc(urunAd(cu))} ürününü ${esc(k.ad)}'den çıkar</b><span>Şu an üzerinde durduğun ürün</span></div></button>` : ''}
+    <button class="row" id="mDuz"><div class="m"><b>${esc(k.ad)} sırasını ve sayım şeklini düzenle</b><span>Sürükle-bırak, Koli / Tartı / Adet</span></div><span class="ch">›</span></button>
+    <button class="row" id="mYer"><div class="m"><b>Ürün yerleri tablosu</b><span>Bütün ürünler × bütün konumlar</span></div><span class="ch">›</span></button></div>
+    <button class="btn alt" id="mKap" style="margin-top:6px">Kapat</button>`, el => {
+    el.querySelector('#mKap').onclick = closeSheet;
+    el.querySelector('#mDuz').onclick = () => { closeSheet(); go({ tab: 'ayarlar', syId: null, ar: `konum:${sid}:${k.id}` }); };
+    el.querySelector('#mYer').onclick = () => { closeSheet(); go({ tab: 'ayarlar', syId: null, ar: `yerler:${sid}`, yerAra: '', yerFiltre: 'hepsi' }); };
+    el.querySelector('#mEkle').onclick = () => urunSecici((k.satirlar || []).map(x => x.u), sec => {
+      konumaEkle(sid, k.id, sec);
+      if (sy.tur === 'gunluk') { const s = S.subeler[sid]; const g = [...new Set([...(s.gunluk || []), ...sec])]; s.gunluk = g; subeKaydet(sid, { gunluk: g }); }
+      toast(`${sec.length} ürün ${k.ad}'e eklendi.`); editor();
+    });
+    const mc = el.querySelector('#mCik'); if (mc) mc.onclick = async () => {
+      if (!(await onayla(`<b>${esc(urunAd(cu))}</b> bundan sonra ${esc(k.ad)}'de sayılmayacak.`, 'Çıkar'))) return;
+      konumdanCikar(sid, k.id, cu); const n = (S.subeler[sid].konumlar.find(x => x.id === k.id)?.satirlar || []).length;
+      if (S.f && S.f.i >= n) S.f.i = Math.max(0, n - 1); toast(`${urunAd(cu)} ${k.ad}'den çıkarıldı.`); editor();
+    };
+  });
 }
 function gorunur() { const el = $('#edlist'); const r = el && el.querySelector('tr.cur'); if (!r) return; const top = r.offsetTop, h = r.offsetHeight; if (top - 30 < el.scrollTop || top + h > el.scrollTop + el.clientHeight - 10) el.scrollTop = Math.max(0, top - el.clientHeight / 3); }
 function aktifHucre() { const sy = syBul(S.syId); const sb = sube(); if (!sy || !sb || !S.f) return null; const k = kapsam(sb, sy.tur).find(x => x.id === S.f.k); const s = k && k.satirlar[S.f.i]; return s ? { sy, k, s } : null; }
@@ -381,6 +405,7 @@ function ayarlar() {
   if (sayfa === 'konum') return konumAyar(a1, a2);
   if (sayfa === 'sonucsira') return sonucSiraAyar(a1);
   if (sayfa === 'gunluk') return gunlukAyar(a1);
+  if (sayfa === 'yerler') return yerlerAyar(a1);
   if (sayfa === 'urunler') return urunlerAyar();
   if (sayfa === 'kullanicilar') return kullanicilarAyar();
   const ids = Object.keys(S.subeler).sort((a, b) => S.subeler[a].ad.localeCompare(S.subeler[b].ad, 'tr'));
@@ -428,6 +453,7 @@ function subeAyar(id) {
     <div class="sec">Konumlar · sürükleyip sıralayın</div><div class="card sl" id="kl">${ks.map(k => `<div class="si"><span class="drag">≡</span><button class="row" style="padding:4px 0;border:0" data-k="${k.id}"><div class="m"><b>${esc(k.ad)}</b><span>${(k.satirlar || []).length} ürün</span></div><span class="ch">›</span></button></div>`).join('')}
       <div class="si"><button class="row" style="padding:4px 0;border:0" id="kEkle"><div class="m"><b style="color:var(--blue)">+ Konum ekle</b></div></button></div></div>
     <div class="sec">Listeler</div><div class="card">
+      <button class="row" id="sYer"><div class="m"><b>Ürün yerleri</b><span>Hangi ürün hangi konumda sayılır · tek ekranda</span></div><span class="ch">›</span></button>
       <button class="row" id="sSon"><div class="m"><b>Sonuç sırası</b><span>${(s.sonuc || []).length} ürün · Domino's sistemindeki sıra</span></div><span class="ch">›</span></button>
       <button class="row" id="sGun"><div class="m"><b>Günlük sayım listesi</b><span>${(s.gunluk || []).length} ürün</span></div><span class="ch">›</span></button></div>
     <div class="sec">Diğer</div><div class="card"><button class="row" id="sKop"><div class="m"><b>Başka şubeden kopyala</b><span>Konumlar, sonuç sırası ve günlük liste değiştirilir</span></div><span class="ch">›</span></button></div></div>`;
@@ -440,7 +466,7 @@ function subeAyar(id) {
   $('#kEkle').onclick = () => openSheet(`<h2>Konum ekle</h2><label class="field"><span>Konum adı</span><input id="ka" placeholder="Örn. Soğuk Hava Deposu"></label><div class="btns"><button class="btn" id="kk">Ekle</button></div>`, el => {
     el.querySelector('#kk').onclick = () => { const ad = el.querySelector('#ka').value.trim(); if (!ad) return; let kid = slug(ad); while (ks.find(k => k.id === kid)) kid += '2'; const yeni = [...ks, { id: kid, ad, satirlar: [] }]; subeKaydet(id, { konumlar: yeni }); closeSheet(); go({ ar: `konum:${id}:${kid}` }); };
   });
-  $('#sSon').onclick = () => go({ ar: 'sonucsira:' + id }); $('#sGun').onclick = () => go({ ar: 'gunluk:' + id });
+  $('#sYer').onclick = () => go({ ar: 'yerler:' + id, yerAra: '', yerFiltre: 'hepsi' }); $('#sSon').onclick = () => go({ ar: 'sonucsira:' + id }); $('#sGun').onclick = () => go({ ar: 'gunluk:' + id });
   $('#sKop').onclick = () => openSheet(`<h2>Başka şubeden kopyala</h2><p class="note">${esc(s.ad)} şubesinin konumları, sonuç sırası ve günlük listesi seçtiğiniz şubeninkiyle değiştirilecek.</p><label class="field"><span>Kaynak şube</span><select id="kq">${Object.keys(S.subeler).filter(x => x !== id).map(x => `<option value="${x}">${esc(S.subeler[x].ad)}</option>`).join('')}</select></label><div class="btns"><button class="btn" id="kz">Kopyala</button></div>`, el => {
     el.querySelector('#kz').onclick = () => { const k = S.subeler[el.querySelector('#kq').value]; if (!k) return; subeKaydet(id, { konumlar: JSON.parse(JSON.stringify(k.konumlar || [])), sonuc: [...(k.sonuc || [])], gunluk: [...(k.gunluk || [])] }); closeSheet(); toast('Kopyalandı.'); };
   });
@@ -460,7 +486,7 @@ function konumAyar(sid, kid) {
   $('#app').querySelectorAll('[data-y]').forEach(b => b.onclick = () => { const n = sat.map((x, i) => i === +b.dataset.i ? { ...x, y: b.dataset.y } : x); kaydet(n); render(); });
   $('#app').querySelectorAll('[data-sil]').forEach(b => b.onclick = () => { const n = sat.filter((x, i) => i !== +b.dataset.sil); kaydet(n); render(); });
   suruklenebilir($('#ul'), (a, b) => { const n = [...sat]; n.splice(b, 0, n.splice(a, 1)[0]); kaydet(n); render(); });
-  $('#uEkle').onclick = () => urunSecici(sat.map(x => x.u), sec => { const n = [...sat, ...sec.map(u => ({ u, y: S.urunler[u].koliIci ? 'koli' : 'adet' }))]; kaydet(n); render(); });
+  $('#uEkle').onclick = () => urunSecici(sat.map(x => x.u), sec => { const n = [...sat, ...sec.map(u => ({ u, y: varsayilanYon(k, u) }))]; kaydet(n); render(); });
   $('#kAd').onclick = () => openSheet(`<h2>Konum adı</h2><label class="field"><span>Ad</span><input id="ka" value="${esc(k.ad)}"></label><div class="btns"><button class="btn" id="kk">Kaydet</button></div>`, el => { el.querySelector('#kk').onclick = () => { const ad = el.querySelector('#ka').value.trim(); if (!ad) return; subeKaydet(sid, { konumlar: ks.map(x => x.id === kid ? { ...x, ad } : x) }); closeSheet(); }; });
   $('#kSil').onclick = async () => { if (!(await onayla(`"${k.ad}" konumu ve içindeki ${sat.length} ürün satırı silinecek. Geçmiş sayımlar etkilenmez.`, 'Sil'))) return; subeKaydet(sid, { konumlar: ks.filter(x => x.id !== kid) }); geri(); };
 }
@@ -471,6 +497,15 @@ function urunSecici(haric, bitti) {
     el.querySelectorAll('input[type=checkbox]').forEach(c => c.onchange = () => { c.checked ? sec.add(c.value) : sec.delete(c.value); el.querySelector('#ue').textContent = sec.size ? `Ekle (${sec.size})` : 'Ekle'; });
     el.querySelector('#ue').onclick = () => { closeSheet(); if (sec.size) bitti(liste.map(u => u.id).filter(id => sec.has(id))); };
   });
+}
+function varsayilanYon(k, u) { const x = S.urunler[u] || {}; if (ascii(k.ad).includes('make')) return x.dara != null ? 'tarti' : 'adet'; return x.koliIci != null ? 'koli' : 'adet'; }
+function konumaEkle(sid, kid, urunler) {
+  const s = S.subeler[sid]; const yeni = (s.konumlar || []).map(k => k.id !== kid ? k : { ...k, satirlar: [...(k.satirlar || []), ...urunler.filter(u => !(k.satirlar || []).some(x => x.u === u)).map(u => ({ u, y: varsayilanYon(k, u) }))] });
+  s.konumlar = yeni; return subeKaydet(sid, { konumlar: yeni });
+}
+function konumdanCikar(sid, kid, u) {
+  const s = S.subeler[sid]; const yeni = (s.konumlar || []).map(k => k.id !== kid ? k : { ...k, satirlar: (k.satirlar || []).filter(x => x.u !== u) });
+  s.konumlar = yeni; return subeKaydet(sid, { konumlar: yeni });
 }
 function subedekiUrunler(s) { const set = new Set(); (s.konumlar || []).forEach(k => (k.satirlar || []).forEach(x => set.add(x.u))); return set; }
 function sonucSiraAyar(sid) {
@@ -486,6 +521,24 @@ function sonucSiraAyar(sid) {
   $('#app').querySelectorAll('[data-sil]').forEach(b => b.onclick = () => { kaydet(l.filter((x, i) => i !== +b.dataset.sil)); render(); });
   $('#uEkle').onclick = () => urunSecici(l, sec => { kaydet([...l, ...sec]); render(); });
   const ee = $('#eksikEkle'); if (ee) ee.onclick = () => { kaydet([...l, ...eksik]); render(); };
+}
+function yerlerAyar(sid) {
+  const s = S.subeler[sid]; if (!s) return; const ks = s.konumlar || [];
+  const yer = {}; ks.forEach(k => (k.satirlar || []).forEach(x => (yer[x.u] ||= new Set()).add(k.id)));
+  const l = urunlerSirali().filter(u => u.aktif !== false); const yok = l.filter(u => !yer[u.id]).length;
+  const f = S.yerFiltre || 'hepsi'; const q = S.yerAra || '';
+  const gor = u => (f !== 'yok' || !yer[u.id]) && (!q || ascii(u.ad).includes(ascii(q)));
+  const eskiY = window.scrollY;
+  $('#app').innerHTML = ust('Ürün yerleri', { geri: true, subeSecici: false, alt: `${s.ad} · ${l.length} ürün · ${ks.length} konum` }) + `<div class="pad">
+    <p class="note" style="margin:0 0 8px">Konuma dokununca ürün o konumun sonuna eklenir, tekrar dokununca çıkar. Sırayı konum sayfasından sürükleyerek değiştirin.</p>
+    <input class="search" id="ya" placeholder="Ara…" value="${esc(q)}">
+    <div class="chips"><button class="chip ${f === 'hepsi' ? 'on' : ''}" data-f="hepsi">Hepsi</button><button class="chip ${f === 'yok' ? 'on' : ''}" data-f="yok">Hiçbir yerde olmayanlar (${yok})</button></div>
+    <div class="card">${l.map(u => `<div class="yr" data-ad="${esc(ascii(u.ad))}" ${gor(u) ? '' : 'hidden'} style="padding:10px 12px;border-bottom:1px solid var(--line)"><b style="font-size:14px">${esc(u.ad)}</b>${yer[u.id] ? '' : ' <span class="tag a">hiçbir yerde yok</span>'}
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${ks.map(k => { const on = yer[u.id]?.has(k.id); return `<button class="chip ${on ? 'on' : ''}" style="padding:5px 9px;font-size:12px" data-u="${u.id}" data-k="${k.id}">${on ? '✓ ' : ''}${esc(k.ad)}</button>`; }).join('')}</div></div>`).join('') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div></div>`;
+  bagla(); window.scrollTo(0, eskiY);
+  $('#ya').oninput = e => { S.yerAra = e.target.value; const qq = ascii(e.target.value); $('#app').querySelectorAll('.yr').forEach(r => { const u = l.find(x => ascii(x.ad) === r.dataset.ad); r.hidden = !((f !== 'yok' || !yer[u?.id]) && (!qq || r.dataset.ad.includes(qq))); }); };
+  $('#app').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.yerFiltre = b.dataset.f; render(); });
+  $('#app').querySelectorAll('.yr [data-u]').forEach(b => b.onclick = () => { const u = b.dataset.u, k = b.dataset.k; if (yer[u]?.has(k)) konumdanCikar(sid, k, u); else konumaEkle(sid, k, [u]); render(); });
 }
 function gunlukAyar(sid) {
   const s = S.subeler[sid]; if (!s) return; const gl = new Set(s.gunluk || []); const urs = [...subedekiUrunler(s)].sort((a, b) => (S.urunler[a]?.sira ?? 999) - (S.urunler[b]?.sira ?? 999));

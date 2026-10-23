@@ -32,5 +32,10 @@ Telefonda adresi açın → tarayıcı menüsü → **Ana ekrana ekle**.
 - İnternet yoksa (soğuk hava deposu) yazılanlar telefonda tutulur, bağlantı gelince gönderilir.
 - Sayımlar 7 gün saklanır.
 
+## Ürün yerleri
+**Ayarlar → Şube → Ürün yerleri**: her ürünün altında şubenin konumları düğme olarak durur; dokununca ürün o konumun sonuna eklenir, tekrar dokununca çıkar. "Hiçbir yerde olmayanlar" filtresi sayılmayacak ürünleri gösterir. Sayım şekli kendiliğinden seçilir (Makeline'da darası varsa tartı; diğer konumlarda koli içi varsa koli; yoksa adet), konum sayfasından değiştirilebilir.
+
+Sayım ekranında (sadece yönetici) konum sekmelerinin sonundaki **⚙** iki kez dokununca açılır: o konuma ürün ekle, üzerinde durulan ürünü konumdan çıkar, konum sırasını düzenle, ürün yerleri tablosu.
+
 ## Sonuç
 Şubenin **sonuç sırası** (Domino's sistemine giriş sırası) ile listelenir. Sisteme girilen ürüne dokunup işaretlenir; işaretler sayımla birlikte saklanır, başka telefondan da görünür. "Resim olarak paylaş" ile WhatsApp'a atılır.
