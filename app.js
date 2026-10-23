@@ -74,7 +74,7 @@ onAuthStateChanged(auth, async u => {
   render();
 });
 function baglan() {
-  if (!S.unsub.urun) S.unsub.urun = onSnapshot(doc(db, 'genel', 'urunler'), s => { S.urunler = (s.exists() && s.data().u) || {}; S.urunYuklendi = true; adlariDuzenle(); render(); }, hata);
+  if (!S.unsub.urun) S.unsub.urun = onSnapshot(doc(db, 'genel', 'urunler'), s => { S.urunler = (s.exists() && s.data().u) || {}; S.urunDuzen = (s.exists() && s.data().duzen) || 0; S.urunYuklendi = true; adlariDuzenle(); render(); }, hata);
   for (const k of Object.keys(S.unsub)) if (k.startsWith('sb:')) { S.unsub[k](); delete S.unsub[k]; }
   if (admin()) {
     S.unsub['sb:*'] = onSnapshot(collection(db, 'subeler'), s => { S.subeler = {}; s.forEach(d => S.subeler[d.id] = d.data()); subeSec(); render(); }, hata);
@@ -109,17 +109,20 @@ function eskiSayimlariSil() {
 }
 
 /* İçecek adları tek düzen: önce boyut/ambalaj, sonra ad (eski kayıtlar bir kez yeniden adlandırılır). */
-const AD_DUZEN = {"KOLA 1 LT": "1 LT KOLA", "KOLA KUTU": "KUTU KOLA", "DIET KOLA 1 LT": "1 LT DIET KOLA", "DIET KOLA KUTU": "KUTU DIET KOLA", "ZERO KOLA 1 LT": "1 LT ZERO KOLA", "ZERO KOLA KUTU": "KUTU ZERO KOLA", "FANTA 1 LT": "1 LT FANTA", "FANTA KUTU": "KUTU FANTA", "SPRITE 1 LT": "1 LT SPRITE", "SPRITE KUTU": "KUTU SPRITE", "AYRAN 1 LT": "1 LT AYRAN", "AYRAN 300 ML": "300 ML AYRAN", "AYRAN 200 ML": "200 ML AYRAN", "FUSE TEA ŞEFTALİ": "KUTU FUSE TEA ŞEFTALİ", "FUSE TEA LİMON": "KUTU FUSE TEA LİMON", "FUSE TEA MANGO": "KUTU FUSE TEA MANGO", "1LT FUSETEA LİMON": "1 LT FUSE TEA LİMON", "1LT FUSETEA ŞEFTALİ": "1 LT FUSE TEA ŞEFTALİ", "MONSTER ENERGY": "KUTU MONSTER ENERGY", "MONSTER ULTRA": "KUTU MONSTER ULTRA", "CAPPY KARIŞIK": "KUTU CAPPY KARIŞIK", "SWEPS LİMON": "1 LT SCHWEPPES BİTTER LİMON", "SWEPS PORTAKAL": "1 LT SCHWEPPES MANDALİNA", "SU": "500 ML DAMLA SU"}
+const AD_DUZEN = {"KOLA 1 LT": "1 LT KOLA", "KOLA KUTU": "KUTU KOLA", "DIET KOLA 1 LT": "1 LT DIET KOLA", "DIET KOLA KUTU": "KUTU DIET KOLA", "ZERO KOLA 1 LT": "1 LT ZERO KOLA", "ZERO KOLA KUTU": "KUTU ZERO KOLA", "FANTA 1 LT": "1 LT FANTA", "FANTA KUTU": "KUTU FANTA", "SPRITE 1 LT": "1 LT SPRITE", "SPRITE KUTU": "KUTU SPRITE", "AYRAN 1 LT": "1 LT AYRAN", "AYRAN 300 ML": "300 ML AYRAN", "AYRAN 200 ML": "200 ML AYRAN", "FUSE TEA ŞEFTALİ": "KUTU FUSE TEA ŞEFTALİ", "FUSE TEA LİMON": "KUTU FUSE TEA LİMON", "FUSE TEA MANGO": "KUTU FUSE TEA MANGO", "1LT FUSETEA LİMON": "1 LT FUSE TEA LİMON", "1LT FUSETEA ŞEFTALİ": "1 LT FUSE TEA ŞEFTALİ", "MONSTER ENERGY": "KUTU MONSTER ENERGY", "MONSTER ULTRA": "KUTU MONSTER ULTRA", "CAPPY KARIŞIK": "KUTU CAPPY KARIŞIK", "SWEPS LİMON": "1 LT SCHWEPPES BİTTER LİMON", "SWEPS PORTAKAL": "1 LT SCHWEPPES MANDALİNA", "SU": "500 ML DAMLA SU", "DOMİNOS SOS 530 GR.": "DOMİNOS SOS", "KETCAP 550G": "KETÇAP", "MAYONEZ 550 GR": "MAYONEZ", "CHEDDAR SOS 790 GR": "CHEDDAR SOS"}
+// Yanlışlıkla eklenen kopyalar (XL YOĞURT / XL DOMİNOS ile aynı): bir kez kaldırılır.
+const KOPYALAR = ["YOĞURTLU SOS 80G", "DOMİNOS SOS 80 GR"];
 // Listede yoksa bir kez eklenen ürünler (kaldırılırsa geri gelmez).
-const YENI_URUNLER = [{ ad: "PET 450 ML KOLA", birim: "adet", koliIci: 12 }, { ad: "PET 450 ML ZERO KOLA", birim: "adet", koliIci: 12 }, { ad: "KUTU REDBULL KLASİK", birim: "adet", koliIci: null }, { ad: "KUTU REDBULL ŞEFTALİ", birim: "adet", koliIci: null }, { ad: "ALGIDA CLASSICS VANİLYA", birim: "adet", koliIci: null }, { ad: "ALGIDA MARAŞ USULÜ CUP", birim: "adet", koliIci: null }, { ad: "ALGIDA MAX CLASSIC KAKAO", birim: "adet", koliIci: null }, { ad: "MAGNUM MİNİ BADEM", birim: "adet", koliIci: null }, { ad: "CHEDDAR SOS 790 GR", birim: "kg", koliIci: 0.79 }, { ad: "WAFFLE & KREP KREMA SOS", birim: "kg", koliIci: null }, { ad: "YOĞURTLU SOS 80G", birim: "adet", koliIci: null }, { ad: "DOMİNOS SOS 80 GR", birim: "adet", koliIci: null }, { ad: "35*35 YAĞLI KAĞIT TABAKA", birim: "kg", koliIci: null }, { ad: "ALÜMİNYUM FOLYO", birim: "adet", koliIci: null }];;
+const YENI_URUNLER = [{ ad: "PET 450 ML KOLA", birim: "adet", koliIci: 12 }, { ad: "PET 450 ML ZERO KOLA", birim: "adet", koliIci: 12 }, { ad: "KUTU REDBULL KLASİK", birim: "adet", koliIci: null }, { ad: "KUTU REDBULL ŞEFTALİ", birim: "adet", koliIci: null }, { ad: "ALGIDA CLASSICS VANİLYA", birim: "adet", koliIci: null }, { ad: "ALGIDA MARAŞ USULÜ CUP", birim: "adet", koliIci: null }, { ad: "ALGIDA MAX CLASSIC KAKAO", birim: "adet", koliIci: null }, { ad: "MAGNUM MİNİ BADEM", birim: "adet", koliIci: null }, { ad: "CHEDDAR SOS", birim: "kg", koliIci: 0.79 }, { ad: "WAFFLE & KREP KREMA SOS", birim: "kg", koliIci: null }, { ad: "35*35 YAĞLI KAĞIT TABAKA", birim: "kg", koliIci: null }, { ad: "ALÜMİNYUM FOLYO", birim: "adet", koliIci: null }];;
 let adDuzenYapildi = false;
 function adlariDuzenle() {
   if (adDuzenYapildi || !admin() || !S.urunYuklendi) return; adDuzenYapildi = true;
   const mevcut = new Set(Object.values(S.urunler).map(x => x.ad)); const p = {};
   for (const [id, x] of Object.entries(S.urunler)) { const y = AD_DUZEN[x.ad]; if (y && !mevcut.has(y)) { p[`u.${id}.ad`] = y; mevcut.add(y); } }
+  if (S.urunDuzen < 2 && Object.keys(S.urunler).length) { for (const [id, x] of Object.entries(S.urunler)) if (KOPYALAR.includes(x.ad) && x.aktif !== false) { p[`u.${id}.aktif`] = false; p[`u.${id}.kaldirma`] = new Date().toISOString(); } p.duzen = 2; }
   let ek = 0; if (Object.keys(S.urunler).length) { let sira = Math.max(0, ...Object.values(S.urunler).map(x => x.sira ?? 0)); for (const y of YENI_URUNLER) if (!mevcut.has(y.ad)) { p[`u.${yeniId('u')}`] = { ...y, dara: null, sktGun: null, cozulmeGun: null, aktif: true, sira: ++sira }; mevcut.add(y.ad); ek++; } }
-  const ad = Object.keys(p).length - ek;
-  if (Object.keys(p).length) updateDoc(doc(db, 'genel', 'urunler'), p).then(() => toast([ad ? `${ad} ürün adı düzenlendi` : '', ek ? `${ek} yeni içecek eklendi` : ''].filter(Boolean).join(' · ') + '.')).catch(() => { adDuzenYapildi = false; });
+  const ad = Object.keys(p).filter(k => k.endsWith('.ad')).length;
+  if (Object.keys(p).length) updateDoc(doc(db, 'genel', 'urunler'), p).then(() => toast([ad ? `${ad} ürün adı düzenlendi` : '', Object.keys(p).some(k => k.endsWith('.aktif')) ? 'kopya XL soslar kaldırıldı' : '', ek ? `${ek} yeni içecek eklendi` : ''].filter(Boolean).join(' · ') + '.')).catch(() => { adDuzenYapildi = false; });
 }
 /* ================= Çizim ================= */
 function render() {
@@ -437,7 +440,7 @@ function ayarlar() {
   $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => go({ ar: 'urunler' }); $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
 }
 async function seedYukle() {
-  const { SEED } = await import('./seed.js?v=6');
+  const { SEED } = await import('./seed.js?v=7');
   const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => adId[x.ad] = id);
   const yeni = Object.values(SEED.urunler).filter(x => !adId[x.ad]).length;
   const geri = Object.values(SEED.urunler).filter(x => adId[x.ad] && S.urunler[adId[x.ad]].aktif === false).length;
