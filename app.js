@@ -520,12 +520,22 @@ function irsaliyeEkle() {
     const f = el.querySelector('#irF'); if (f) f.onchange = () => { const fs = [...f.files]; if (fs.length) irsaliyeOku(fs); };
   });
 }
-async function kucult(blob) { try { const bmp = await createImageBitmap(blob); const sc = Math.min(1, 2000 / Math.max(bmp.width, bmp.height)); if (sc >= 1 && blob.size < 3.5e6 && /jpeg|png|webp/.test(blob.type)) return blob; const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); return await new Promise(r => c.toBlob(r, 'image/jpeg', .85)); } catch (e) { return blob; } }
+async function kucult(blob) { try { const bmp = await createImageBitmap(blob); const sc = Math.min(1, 1600 / Math.max(bmp.width, bmp.height)); if (sc >= 1 && blob.size < 1.2e6 && /jpeg|png|webp/.test(blob.type)) return blob; const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); return await new Promise(r => c.toBlob(r, 'image/jpeg', .8)); } catch (e) { return blob; } }
 const b64 = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(blob); });
 function aiHata(code, msg) { const e = new Error(msg || code); e.code = code; return e; }
+// Hız için "düşünme" kapatılır; model desteklemiyorsa bir sonraki ayarla tekrar denenir.
+const DUSUNME = [{ thinkingBudget: 0 }, { thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }, null]; let dusunmeI = 0;
+try { dusunmeI = +localStorage.getItem('env_dusunme') || 0; } catch (e) { }
 async function geminiCagir(model, key, parts) {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }) });
-  let j = null; try { j = await res.json(); } catch (e) { }
+  for (;;) {
+    const gc = { temperature: 0, responseMimeType: 'application/json' }; const th = DUSUNME[dusunmeI]; if (th) gc.thinkingConfig = th;
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }) });
+    let j = null; try { j = await res.json(); } catch (e) { }
+    if (!res.ok && res.status === 400 && th && /think/i.test((j && j.error && j.error.message) || '')) { dusunmeI++; try { localStorage.setItem('env_dusunme', dusunmeI); } catch (e) { } continue; }
+    return geminiSonuc(res, j);
+  }
+}
+function geminiSonuc(res, j) {
   if (!res.ok) { const m = (j && j.error && j.error.message) || ''; if (res.status === 429) throw aiHata('rate', m); if (res.status === 404) throw aiHata('model', m); if (res.status === 403 || (res.status === 400 && /api key/i.test(m))) throw aiHata('key', m); throw aiHata('http', m || ('HTTP ' + res.status)); }
   const t = ((j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('').trim(); if (!t) throw aiHata('bos'); return t;
 }
@@ -539,7 +549,8 @@ const AI_MESAJ = { rate: 'Gemini ücretsiz kullanım sınırına ulaşıldı. Bi
 const eslKey = ad => ascii(ad).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 function eslesmeBul(ad) { const k = eslKey(ad); const u = S.eslesme[k]; return u && S.urunler[u] && S.urunler[u].aktif !== false ? u : null; }
 async function irsaliyeOku(dosyalar) {
-  openSheet(`<h2>Okunuyor…</h2><p class="note">İrsaliye fotoğrafı okunuyor, birkaç saniye sürebilir.</p>`);
+  const t0 = Date.now(); openSheet(`<h2>Okunuyor… <span id="okS" class="num" style="color:var(--mut);font-size:15px"></span></h2><p class="note">İrsaliye fotoğrafı okunuyor. Genelde 10–20 saniye sürer.</p><div class="bar"><i id="okB" style="width:5%;transition:width .9s linear"></i></div>`);
+  const zam = setInterval(() => { const sn = Math.round((Date.now() - t0) / 1000); const s1 = $('#okS'), b1 = $('#okB'); if (s1) s1.textContent = sn + ' sn'; if (b1) b1.style.width = Math.min(95, 5 + sn * 4) + '%'; }, 1000);
   try {
     const urunAdlari = urunlerSirali().filter(u => u.aktif !== false && subedeGorunur(u.id, S.subeId)).map(u => u.ad);
     const prompt = `Bu görüntü(ler) Domino's Pizza şubesine gelen bir sevkiyatın belgesidir: ya kağıt e-İrsaliye ya da 3SC "siparişiniz teslim edildi" e-postasının ekran görüntüsü.
@@ -559,8 +570,8 @@ Kurallar:
     const kal = (j.kalemler || []).map(k => { const miktar = typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar); const u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null);
       return { ad: String(k.ad || '').trim(), kod: k.kod || '', miktar, birim: k.birim || '', koli: typeof k.koli === 'number' ? k.koli : sayiOku(k.koli), gida: k.gida !== false, u, aiU: u }; });
     S.irsTaslak = { tarih: /^\d{4}-\d{2}-\d{2}$/.test(j.tarih || '') ? j.tarih : bugun(), no: String(j.no || ''), okunanSube: j.sube || '', kaynak: j.tur === 'mail' ? 'mail' : 'kagit', kalemler: kal.filter(k => k.gida), digerleri: kal.filter(k => !k.gida) };
-    closeSheet(); go({ ar: 'irs' });
-  } catch (e) { console.error(e); openSheet(`<h2>Okunamadı</h2><p class="note">${esc(AI_MESAJ[e.code] || hataMetni(e))}</p><div class="btns"><button class="btn alt" id="kp">Kapat</button></div>`, el => el.querySelector('#kp').onclick = closeSheet); }
+    clearInterval(zam); console.info('irsaliye okuma', Math.round((Date.now() - t0) / 1000), 'sn'); closeSheet(); go({ ar: 'irs' });
+  } catch (e) { clearInterval(zam); console.error(e); openSheet(`<h2>Okunamadı</h2><p class="note">${esc(AI_MESAJ[e.code] || hataMetni(e))}</p><div class="btns"><button class="btn alt" id="kp">Kapat</button></div>`, el => el.querySelector('#kp').onclick = closeSheet); }
 }
 function irsaliyeDuzen() {
   const T = S.irsTaslak; const sb = sube(); if (!T || !sb) { S.ar = null; return sktEkrani(); }
