@@ -76,10 +76,10 @@ onAuthStateChanged(auth, async u => {
 function baglan() {
   if (!S.unsub.ai) S.unsub.ai = onSnapshot(doc(db, 'genel', 'ai'), s => { S.ai = (s.exists() && s.data()) || {}; }, () => { });
   if (!S.unsub.esl) S.unsub.esl = onSnapshot(doc(db, 'genel', 'eslesme'), s => { S.eslesme = (s.exists() && s.data().m) || {}; }, () => { });
-  if (!S.unsub.urun) S.unsub.urun = onSnapshot(doc(db, 'genel', 'urunler'), s => { S.urunler = (s.exists() && s.data().u) || {}; S.urunDuzen = (s.exists() && s.data().duzen) || 0; S.urunYuklendi = true; adlariDuzenle(); render(); }, hata);
+  if (!S.unsub.urun) S.unsub.urun = onSnapshot(doc(db, 'genel', 'urunler'), s => { S.urunler = (s.exists() && s.data().u) || {}; S.urunDuzen = (s.exists() && s.data().duzen) || 0; S.urunYuklendi = true; adlariDuzenle(); gunlukKur(); render(); }, hata);
   for (const k of Object.keys(S.unsub)) if (k.startsWith('sb:')) { S.unsub[k](); delete S.unsub[k]; }
   if (admin()) {
-    S.unsub['sb:*'] = onSnapshot(collection(db, 'subeler'), s => { S.subeler = {}; s.forEach(d => S.subeler[d.id] = d.data()); subeSec(); render(); }, hata);
+    S.unsub['sb:*'] = onSnapshot(collection(db, 'subeler'), s => { S.subeler = {}; s.forEach(d => S.subeler[d.id] = d.data()); subeSec(); gunlukKur(); render(); }, hata);
     if (!S.unsub.kul) S.unsub.kul = onSnapshot(collection(db, 'kullanicilar'), s => { S.kullanicilar = s.docs.map(d => ({ uid: d.id, ...d.data() })); render(); }, hata);
   } else {
     S.subeler = {};
@@ -108,6 +108,14 @@ function subeSec(id) {
   }, hata);
 }
 // Son 7 günden eski sayımlar silinir (veri büyümesin).
+const GUNLUK_VARSAYILAN = ['7 HAMUR', '10 HAMUR', '13 HAMUR', 'PAN HAMUR', '10 TABAN', '13 TABAN', 'SUCUK', 'SOSİS', 'PEPPERONİ', 'JAMBON', 'PASTIRMA', 'MANGAL SUCUK', 'KÜP SUCUK', 'TANDIR ETİ', 'MOZZARELLA', 'ÇUBUK MOZZARELLA', 'CHEDDAR PEYNİRİ', 'ERİTME PEYNİRİ', 'PATATES', 'FİNGERS', 'TAVUK PARÇALARI', 'ÇITIR TAVUK TOPLARI', 'KÖFTE', 'SUFLE', 'PİZZA SOSU', 'MANTAR', 'TON BALIĞI', 'SİYAH ZEYTİN'];
+function gunlukKur() { // her şubede günlük liste bir kez, boşsa doldurulur
+  if (!admin() || !S.urunYuklendi) return; const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false) adId[x.ad] = id; });
+  for (const [sid, s] of Object.entries(S.subeler)) {
+    if (s.gunlukKuruldu || (s.gunluk || []).length) continue; const var_ = subedekiUrunler(s); const l = GUNLUK_VARSAYILAN.map(a => adId[a]).filter(u => u && var_.has(u));
+    if (!l.length) continue; s.gunlukKuruldu = true; s.gunluk = l; subeKaydet(sid, { gunluk: l, gunlukKuruldu: true });
+  }
+}
 function eskiSayimlariSil() {
   if (S.temizlendi[S.subeId] || !S.sayimlar.length) return; S.temizlendi[S.subeId] = 1;
   const sinir = new Date(); sinir.setDate(sinir.getDate() - 7); const s = sinir.toLocaleDateString('sv-SE');
@@ -531,27 +539,36 @@ try { dusunmeI = +localStorage.getItem('env_dusunme') || 0; } catch (e) { }
 async function geminiCagir(model, key, parts) {
   for (;;) {
     const gc = { temperature: 0, responseMimeType: 'application/json' }; const th = DUSUNME[dusunmeI]; if (th) gc.thinkingConfig = th;
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }) });
-    let j = null; try { j = await res.json(); } catch (e) { }
+    const ctl = new AbortController(); const zt = setTimeout(() => ctl.abort('zaman'), 40000); if (S.okumaIptal) S.okumaIptal.onabort = () => ctl.abort('iptal');
+    let res; try { res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }) });
+    } catch (e) { clearTimeout(zt); if (ctl.signal.reason === 'iptal') throw aiHata('iptal'); if (ctl.signal.aborted) throw aiHata('zaman'); throw aiHata('ag', e.message); }
+    let j = null; try { j = await res.json(); } catch (e) { } clearTimeout(zt);
     if (!res.ok && res.status === 400 && th && /think/i.test((j && j.error && j.error.message) || '')) { dusunmeI++; try { localStorage.setItem('env_dusunme', dusunmeI); } catch (e) { } continue; }
     return geminiSonuc(res, j);
   }
 }
 function geminiSonuc(res, j) {
-  if (!res.ok) { const m = (j && j.error && j.error.message) || ''; if (res.status === 429) throw aiHata('rate', m); if (res.status === 404) throw aiHata('model', m); if (res.status === 403 || (res.status === 400 && /api key/i.test(m))) throw aiHata('key', m); throw aiHata('http', m || ('HTTP ' + res.status)); }
+  if (!res.ok) { const m = (j && j.error && j.error.message) || ''; if (res.status === 429) throw aiHata('rate', m); if (res.status === 404) throw aiHata('model', m); if (res.status >= 500) throw aiHata('yogun', m); if (res.status === 403 || (res.status === 400 && /api key/i.test(m))) throw aiHata('key', m); throw aiHata('http', m || ('HTTP ' + res.status)); }
   const t = ((j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || []).map(p => p.text || '').join('').trim(); if (!t) throw aiHata('bos'); return t;
 }
 async function flashModelBul(key) { const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } }); const j = await r.json().catch(() => ({})); const ms = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => m.name.replace(/^models\//, '')); return ms.find(n => n === 'gemini-flash-latest') || ms.filter(n => /flash/.test(n) && !/lite|image|tts|live|thinking|exp|preview/.test(n)).sort().reverse()[0] || null; }
 async function gemini(parts) {
-  const key = (S.ai.geminiKey || '').trim(); let model = (S.ai.model || '').trim() || 'gemini-flash-latest'; let t;
-  try { t = await geminiCagir(model, key, parts); } catch (e) { if (e.code !== 'model') throw e; const alt = await flashModelBul(key); if (!alt || alt === model) throw e; t = await geminiCagir(alt, key, parts); }
+  const key = (S.ai.geminiKey || '').trim(); let model = (S.ai.model || '').trim() || 'gemini-2.5-flash'; let t;
+  try { t = await geminiCagir(model, key, parts); }
+  catch (e) {
+    let alt = null;
+    if (e.code === 'model') alt = await flashModelBul(key);
+    else if (e.code === 'zaman' || e.code === 'yogun') alt = 'gemini-2.5-flash-lite'; // yavaş/yoğunsa hafif modelle bir kez daha
+    if (!alt || alt === model) throw e; t = await geminiCagir(alt, key, parts);
+  }
   try { return JSON.parse(t.replace(/^```(?:json)?\s*|\s*```$/g, '')); } catch (e) { throw aiHata('json'); }
 }
-const AI_MESAJ = { rate: 'Gemini ücretsiz kullanım sınırına ulaşıldı. Bir dakika sonra tekrar deneyin.', key: 'Gemini anahtarı geçersiz. Yönetici Ayarlar → Fotoğraf okuma bölümünden kontrol etsin.', model: 'Gemini modeli bulunamadı. Ayarlarda model alanını boş bırakın.', json: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.', bos: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.' };
+const AI_MESAJ = { zaman: 'Gemini 40 saniyede cevap vermedi (iki kez denendi). İnternet bağlantısını kontrol edip tekrar deneyin ya da irsaliyeyi elle girin.', yogun: 'Gemini şu an yoğun. Biraz sonra tekrar deneyin ya da elle girin.', ag: 'Gemini\'ye bağlanılamadı. İnternet bağlantısını kontrol edin.', iptal: 'Okuma iptal edildi.', rate: 'Gemini ücretsiz kullanım sınırına ulaşıldı. Bir dakika sonra tekrar deneyin.', key: 'Gemini anahtarı geçersiz. Yönetici Ayarlar → Fotoğraf okuma bölümünden kontrol etsin.', model: 'Gemini modeli bulunamadı. Ayarlarda model alanını boş bırakın.', json: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.', bos: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.' };
 const eslKey = ad => ascii(ad).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 function eslesmeBul(ad) { const k = eslKey(ad); const u = S.eslesme[k]; return u && S.urunler[u] && S.urunler[u].aktif !== false ? u : null; }
 async function irsaliyeOku(dosyalar) {
-  const t0 = Date.now(); openSheet(`<h2>Okunuyor… <span id="okS" class="num" style="color:var(--mut);font-size:15px"></span></h2><p class="note">İrsaliye fotoğrafı okunuyor. Genelde 10–20 saniye sürer.</p><div class="bar"><i id="okB" style="width:5%;transition:width .9s linear"></i></div>`);
+  const t0 = Date.now(); openSheet(`<h2>Okunuyor… <span id="okS" class="num" style="color:var(--mut);font-size:15px"></span></h2><p class="note">İrsaliye fotoğrafı okunuyor. Genelde 10–20 saniye sürer.</p><div class="bar"><i id="okB" style="width:5%;transition:width .9s linear"></i></div><div class="btns"><button class="btn alt" id="okV">Vazgeç</button></div>`);
+  S.okumaIptal = { onabort: null }; const ip = S.okumaIptal; $('#okV').onclick = () => { ip.iptal = true; if (ip.onabort) ip.onabort(); };
   const zam = setInterval(() => { const sn = Math.round((Date.now() - t0) / 1000); const s1 = $('#okS'), b1 = $('#okB'); if (s1) s1.textContent = sn + ' sn'; if (b1) b1.style.width = Math.min(95, 5 + sn * 4) + '%'; }, 1000);
   try {
     const urunAdlari = sktUrunleri().map(u => u.ad);
@@ -565,14 +582,14 @@ Kurallar:
 - urun eşleştirme örnekleri: "HAMUR 7" → "7 HAMUR", "PIZZA TABANI 10 (24LU) - T" → "10 TABAN", "GURME PATATES" → "PATATES", "CITIR TAVUK FINGER" → "FİNGERS", "SADE CUBUK MOZARELLA 250G" → "ÇUBUK MOZZARELLA", "HAMBURGER PILIC KOFTE 550 GR" → "KÖFTE", "RENDE ERITME PEYNIRI 1 KG" → "ERİTME PEYNİRİ", "CIKOLATALI SUFLE" → "SUFLE", "TAVUK PARCALARI (KICKERS)" → "TAVUK PARÇALARI".
 Ürün listemiz: ${urunAdlari.join(' | ')}`;
     const parts = [{ text: prompt }]; for (const f of dosyalar) { const k = await kucult(f); parts.push({ inline_data: { mime_type: k.type || 'image/jpeg', data: await b64(k) } }); }
-    const j = await gemini(parts);
+    const j = await gemini(parts); if (S.okumaIptal && S.okumaIptal.iptal) return;
     const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false && subedeGorunur(id, S.subeId)) adId[ascii(x.ad)] = id; });
     const kal = (j.kalemler || []).map(k => { const miktar = typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
       const baskaUrun = !u && k.urun && adId[ascii(k.urun)]; // listede var ama SKT takibi yok → atla
       return { ad: String(k.ad || '').trim(), miktar, u, aiU: u, gida: !baskaUrun }; }).filter(k => k.gida);
     S.irsTaslak = { tarih: /^\d{4}-\d{2}-\d{2}$/.test(j.tarih || '') ? j.tarih : bugun(), no: String(j.no || ''), okunanSube: j.sube || '', kaynak: j.tur === 'mail' ? 'mail' : 'kagit', kalemler: kal, digerleri: [] };
     clearInterval(zam); console.info('irsaliye okuma', Math.round((Date.now() - t0) / 1000), 'sn'); closeSheet(); go({ ar: 'irs' });
-  } catch (e) { clearInterval(zam); console.error(e); openSheet(`<h2>Okunamadı</h2><p class="note">${esc(AI_MESAJ[e.code] || hataMetni(e))}</p><div class="btns"><button class="btn alt" id="kp">Kapat</button></div>`, el => el.querySelector('#kp').onclick = closeSheet); }
+  } catch (e) { clearInterval(zam); console.error(e); if (e.code === 'iptal') { closeSheet(); return; } openSheet(`<h2>Okunamadı</h2><p class="note">${esc(AI_MESAJ[e.code] || hataMetni(e))}</p><div class="btns"><button class="btn alt" id="kp">Kapat</button></div>`, el => el.querySelector('#kp').onclick = closeSheet); }
 }
 function irsaliyeDuzen() {
   const T = S.irsTaslak; const sb = sube(); if (!T || !sb) { S.ar = null; return sktEkrani(); }
@@ -619,7 +636,7 @@ function irsaliyeDuzen() {
 function aiPanel() {
   openSheet(`<h2>Fotoğraf okuma (Gemini)</h2><p class="note">İrsaliye fotoğraflarını okumak için ücretsiz Gemini API anahtarı. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> adresinden alıp yapıştırın. Şube hesapları da bu anahtarla irsaliye okutur.</p>
     <label class="field"><span>Gemini API anahtarı</span><input id="aK" type="password" autocomplete="off" value="${esc(S.ai.geminiKey || '')}" placeholder="AIza…"></label>
-    <label class="field"><span>Model (boş bırakabilirsiniz)</span><input id="aM" autocomplete="off" value="${esc(S.ai.model || '')}" placeholder="gemini-flash-latest"></label>
+    <label class="field"><span>Model (boş bırakabilirsiniz)</span><input id="aM" autocomplete="off" value="${esc(S.ai.model || '')}" placeholder="gemini-2.5-flash"></label>
     <div class="err" id="aE"></div><div class="btns"><button class="btn alt" id="aT">Dene</button><button class="btn" id="aS">Kaydet</button></div>`, el => {
     el.querySelector('#aS').onclick = async () => { try { await setDoc(doc(db, 'genel', 'ai'), { geminiKey: el.querySelector('#aK').value.trim(), model: el.querySelector('#aM').value.trim() }, { merge: true }); closeSheet(); toast('Kaydedildi.'); } catch (e) { hata(e); } };
     el.querySelector('#aT').onclick = async () => { const er = el.querySelector('#aE'); er.style.color = 'var(--mut)'; er.textContent = 'Deneniyor…'; const eski = S.ai; S.ai = { geminiKey: el.querySelector('#aK').value.trim(), model: el.querySelector('#aM').value.trim() };
