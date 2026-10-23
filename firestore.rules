@@ -1,0 +1,65 @@
+rules_version = '2';
+
+// Envanter Merkezi — yetki kuralları
+// Roller (kullanicilar/{uid}.rol):
+//   sube  → şube hesabı: sadece kendi şubelerinin ayarlarını okur, o şubelerin sayımlarını yapar.
+//   admin → her şey (ürünler, şubeler, kullanıcılar).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function girisli() { return request.auth != null; }
+    function benYol() { return /databases/$(database)/documents/kullanicilar/$(request.auth.uid); }
+    function ben() { return get(benYol()).data; }
+    function aktif() { return girisli() && exists(benYol()) && ben().aktif == true; }
+    function admin() { return aktif() && ben().rol == 'admin'; }
+    function subede(s) { return aktif() && (ben().rol == 'admin' || s in ben().subeler); }
+    function kurulumYapildi() { return exists(/databases/$(database)/documents/sistem/kurulum); }
+
+    // İlk kurulum: sistemde hiç yönetici yokken giriş yapan ilk kişi kendini yönetici yapabilir (bir kez).
+    match /sistem/kurulum {
+      allow read: if girisli();
+      allow create: if girisli() && !kurulumYapildi()
+        && getAfter(/databases/$(database)/documents/kullanicilar/$(request.auth.uid)).data.rol == 'admin';
+      allow update, delete: if false;
+    }
+
+    match /kullanicilar/{uid} {
+      allow read: if girisli() && (request.auth.uid == uid || admin());
+      allow create: if admin()
+        || (girisli() && request.auth.uid == uid && !kurulumYapildi()
+            && request.resource.data.rol == 'admin' && request.resource.data.aktif == true);
+      allow update, delete: if admin();
+    }
+
+    // Ortak ürün listesi ve genel ayarlar: herkes okur, sadece yönetici yazar.
+    match /genel/{belge} {
+      allow read: if aktif();
+      allow write: if admin();
+    }
+
+    // Şube ayarları (konumlar, sonuç sırası, günlük liste): şube hesabı kendi şubesini okur, sadece yönetici değiştirir.
+    match /subeler/{s} {
+      allow read: if subede(s);
+      allow write: if admin();
+    }
+
+    // Sayımlar: belge adı "şube_tarih_tür". Şube hesabı sadece kendi şubesinin sayımlarını görür ve yazar.
+    match /sayimlar/{id} {
+      allow read: if subede(resource.data.sube);
+      allow create: if subede(request.resource.data.sube)
+        && id == request.resource.data.sube + '_' + request.resource.data.tarih + '_' + request.resource.data.tur
+        && request.resource.data.tur in ['gunluk', 'haftalik'];
+      allow update: if subede(resource.data.sube)
+        && request.resource.data.sube == resource.data.sube
+        && request.resource.data.tarih == resource.data.tarih
+        && request.resource.data.tur == resource.data.tur;
+      allow delete: if subede(resource.data.sube);
+    }
+
+    // Diğer her şey kapalı.
+    match /{yol=**} {
+      allow read, write: if false;
+    }
+  }
+}
