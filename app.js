@@ -511,9 +511,11 @@ function sktEkrani() {
   $('#irEkle').onclick = irsaliyeEkle;
   $('#app').querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { const ir = S.irsaliyeler.find(x => x.id === b.dataset.ir); if (!ir) return; S.irsTaslak = { id: ir.id, tarih: ir.tarih, no: ir.no || '', kaynak: ir.kaynak, kalemler: (ir.kalemler || []).map(k => ({ ...k, gida: true })), digerleri: [] }; go({ ar: 'irs' }); });
 }
+// İrsaliyeden sadece SKT'si takip edilen ürünler (hamurlar, donuklar) okunur.
+const sktUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && u.sktGun && subedeGorunur(u.id, S.subeId));
 function irsaliyeEkle() {
   const anahtar = !!(S.ai.geminiKey || '').trim();
-  openSheet(`<h2>İrsaliye ekle</h2><p class="note">Kağıt irsaliyenin fotoğrafı ya da 3SC "Siparişiniz teslim edildi" mailinin ekran görüntüsü. Birden fazla sayfa seçebilirsiniz.</p>
+  openSheet(`<h2>İrsaliye ekle</h2><p class="note">Kağıt irsaliyenin fotoğrafı ya da 3SC "Siparişiniz teslim edildi" mailinin ekran görüntüsü. Sadece SKT'si takip edilen ürünler (${sktUrunleri().length}: hamurlar, tabanlar, donuklar) okunur. Birden fazla sayfa seçebilirsiniz.</p>
     ${anahtar ? `<label class="btn" style="margin-top:12px">📷 Fotoğraf çek / seç<input type="file" accept="image/*" multiple id="irF" hidden></label>` : `<p class="note" style="color:var(--amber)">Fotoğraf okuma için yönetici Ayarlar → Fotoğraf okuma (Gemini) bölümüne anahtar girmeli.</p>`}
     <div class="btns"><button class="btn alt" id="irE">Elle gir</button></div>`, el => {
     el.querySelector('#irE').onclick = () => { closeSheet(); S.irsTaslak = { tarih: bugun(), no: '', kaynak: 'elle', kalemler: [], digerleri: [] }; go({ ar: 'irs' }); };
@@ -552,30 +554,29 @@ async function irsaliyeOku(dosyalar) {
   const t0 = Date.now(); openSheet(`<h2>Okunuyor… <span id="okS" class="num" style="color:var(--mut);font-size:15px"></span></h2><p class="note">İrsaliye fotoğrafı okunuyor. Genelde 10–20 saniye sürer.</p><div class="bar"><i id="okB" style="width:5%;transition:width .9s linear"></i></div>`);
   const zam = setInterval(() => { const sn = Math.round((Date.now() - t0) / 1000); const s1 = $('#okS'), b1 = $('#okB'); if (s1) s1.textContent = sn + ' sn'; if (b1) b1.style.width = Math.min(95, 5 + sn * 4) + '%'; }, 1000);
   try {
-    const urunAdlari = urunlerSirali().filter(u => u.aktif !== false && subedeGorunur(u.id, S.subeId)).map(u => u.ad);
+    const urunAdlari = sktUrunleri().map(u => u.ad);
     const prompt = `Bu görüntü(ler) Domino's Pizza şubesine gelen bir sevkiyatın belgesidir: ya kağıt e-İrsaliye ya da 3SC "siparişiniz teslim edildi" e-postasının ekran görüntüsü.
+Sadece aşağıdaki ürün listemizde karşılığı olan kalemleri oku (hamurlar, tabanlar ve son kullanma tarihi takip edilen donuk ürünler). Listede karşılığı olmayan bütün kalemleri (içecekler, soslar, kutular, kağıtlar, temizlik, kıyafet, nakliye vb.) tamamen atla, yazma.
 Sadece şu JSON'u döndür:
-{"tur":"irsaliye" ya da "mail","sube":"belgedeki şube adı (ör. SERİK)","tarih":"YYYY-AA-GG","no":"irsaliye no ya da sipariş no","kalemler":[{"kod":"malzeme kodu","ad":"belgede yazdığı gibi ürün adı","miktar":sayı,"birim":"KG|ADET|PAKET|LT","koli":sayı ya da null,"gida":true|false,"urun":"listeden ürün adı ya da null"}]}
+{"tur":"irsaliye" ya da "mail","sube":"belgedeki şube adı (ör. SERİK)","tarih":"YYYY-AA-GG","no":"irsaliye no ya da sipariş no","kalemler":[{"ad":"belgede yazdığı gibi ürün adı","miktar":sayı,"urun":"listemizdeki ürün adı"}]}
 Kurallar:
 - tarih: kağıt irsaliyede "Sevk Tarihi", e-postada "Sevkiyat Tarihi".
 - miktar: kağıt irsaliyede "TÖB Miktarı" sütunu (ondalık virgülü noktaya çevir, 7,68 → 7.68); e-postada "Sevk Edilen" sütunundaki sayı (yoksa "Onaylanan").
-- koli: kağıt irsaliyede "SÖB Miktar" sütunundaki sayı (80 KS → 80, 10 KL → 10, 6 PAK → 6); e-postada null.
-- gida: şapka, tişört, yelek, temizlik ürünleri (Suma, Elmatik), hijyenik bez, nakliye bedeli gibi kalemler false; yiyecek, içecek, sos, kutu, poşet, kağıt, folyo true.
-- urun: kalemi aşağıdaki ürün listemizden en uygun olanla eşleştir (ör. "GURME PATATES" → "PATATES", "HAMUR 7" → "7 HAMUR", "PIZZA TABANI 10 (24LU) - T" → "10 TABAN", "TUKAS DOMINOS SOS 335 GR" → "DOMİNOS SOS", "CHIPOTLE SOS" → "XL CHIPOTLE", "YOGURTLU SOS 25G" → "YOĞURT SOS"). Emin değilsen null.
-- Tablodaki bütün satırları yaz, hiçbirini atlama.
+- urun eşleştirme örnekleri: "HAMUR 7" → "7 HAMUR", "PIZZA TABANI 10 (24LU) - T" → "10 TABAN", "GURME PATATES" → "PATATES", "CITIR TAVUK FINGER" → "FİNGERS", "SADE CUBUK MOZARELLA 250G" → "ÇUBUK MOZZARELLA", "HAMBURGER PILIC KOFTE 550 GR" → "KÖFTE", "RENDE ERITME PEYNIRI 1 KG" → "ERİTME PEYNİRİ", "CIKOLATALI SUFLE" → "SUFLE", "TAVUK PARCALARI (KICKERS)" → "TAVUK PARÇALARI".
 Ürün listemiz: ${urunAdlari.join(' | ')}`;
     const parts = [{ text: prompt }]; for (const f of dosyalar) { const k = await kucult(f); parts.push({ inline_data: { mime_type: k.type || 'image/jpeg', data: await b64(k) } }); }
     const j = await gemini(parts);
     const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false && subedeGorunur(id, S.subeId)) adId[ascii(x.ad)] = id; });
-    const kal = (j.kalemler || []).map(k => { const miktar = typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar); const u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null);
-      return { ad: String(k.ad || '').trim(), kod: k.kod || '', miktar, birim: k.birim || '', koli: typeof k.koli === 'number' ? k.koli : sayiOku(k.koli), gida: k.gida !== false, u, aiU: u }; });
-    S.irsTaslak = { tarih: /^\d{4}-\d{2}-\d{2}$/.test(j.tarih || '') ? j.tarih : bugun(), no: String(j.no || ''), okunanSube: j.sube || '', kaynak: j.tur === 'mail' ? 'mail' : 'kagit', kalemler: kal.filter(k => k.gida), digerleri: kal.filter(k => !k.gida) };
+    const kal = (j.kalemler || []).map(k => { const miktar = typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
+      const baskaUrun = !u && k.urun && adId[ascii(k.urun)]; // listede var ama SKT takibi yok → atla
+      return { ad: String(k.ad || '').trim(), miktar, u, aiU: u, gida: !baskaUrun }; }).filter(k => k.gida);
+    S.irsTaslak = { tarih: /^\d{4}-\d{2}-\d{2}$/.test(j.tarih || '') ? j.tarih : bugun(), no: String(j.no || ''), okunanSube: j.sube || '', kaynak: j.tur === 'mail' ? 'mail' : 'kagit', kalemler: kal, digerleri: [] };
     clearInterval(zam); console.info('irsaliye okuma', Math.round((Date.now() - t0) / 1000), 'sn'); closeSheet(); go({ ar: 'irs' });
   } catch (e) { clearInterval(zam); console.error(e); openSheet(`<h2>Okunamadı</h2><p class="note">${esc(AI_MESAJ[e.code] || hataMetni(e))}</p><div class="btns"><button class="btn alt" id="kp">Kapat</button></div>`, el => el.querySelector('#kp').onclick = closeSheet); }
 }
 function irsaliyeDuzen() {
   const T = S.irsTaslak; const sb = sube(); if (!T || !sb) { S.ar = null; return sktEkrani(); }
-  const urs = urunlerSirali().filter(u => u.aktif !== false && subedeGorunur(u.id, S.subeId));
+  const urs = sktUrunleri();
   const secenek = sel => `<option value="">— eşleşmedi —</option>` + urs.map(u => `<option value="${u.id}" ${u.id === sel ? 'selected' : ''}>${esc(u.ad)}</option>`).join('');
   const subeFarkli = T.okunanSube && !ascii(T.okunanSube).includes(ascii(sb.ad).split(' ')[0]) && !ascii(sb.ad).includes(ascii(T.okunanSube).split(' ')[0]);
   const ayni = T.no && S.irsaliyeler.find(x => x.no === T.no && x.id !== T.id);
@@ -594,7 +595,7 @@ function irsaliyeDuzen() {
       ${k.u && S.urunler[k.u].sktGun ? `<div class="note" style="margin:4px 0 0">SKT son gün: <b>${trTarih(gunEkle(T.tarih, S.urunler[k.u].sktGun))}</b>${S.urunler[k.u].cozulmeGun ? ` · ${trTarih(gunEkle(T.tarih, S.urunler[k.u].cozulmeGun))} sabahına kadar çözülür` : ''}</div>` : ''}</div>`).join('') || '<div class="empty" style="padding:20px">Kalem yok</div>'}</div>
     <div class="btns" style="margin-top:0"><button class="btn alt" id="irS">+ Satır ekle</button></div>
     ${T.digerleri.length ? `<details class="card" style="margin-top:10px"><summary class="row" style="list-style:none"><div class="m"><b>Gıda dışı ${T.digerleri.length} kalem atlandı</b><span>${esc(T.digerleri.map(k => k.ad).join(', '))}</span></div></summary></details>` : ''}
-    <p class="note">Eşleşmeyen satırlar kaydedilmez. Elle eşleştirdiğiniz adlar bir sonraki irsaliyede kendiliğinden tanınır.</p>
+    <p class="note">Sadece SKT'si takip edilen ürünler listelenir. Eşleşmeyen satırlar kaydedilmez. Elle eşleştirdiğiniz adlar bir sonraki irsaliyede kendiliğinden tanınır.</p>
     <div class="btns"><button class="btn" id="irK">${T.id ? 'Değişiklikleri kaydet' : 'Onayla ve kaydet'}</button></div>
     ${T.id ? '<div class="btns"><button class="btn red" id="irD">İrsaliyeyi sil</button></div>' : ''}</div>`;
   bagla();
