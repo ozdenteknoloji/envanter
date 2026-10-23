@@ -37,5 +37,12 @@ Telefonda adresi açın → tarayıcı menüsü → **Ana ekrana ekle**.
 
 Sayım ekranında (sadece yönetici) konum sekmelerinin sonundaki **⚙** iki kez dokununca açılır: o konuma ürün ekle, üzerinde durulan ürünü konumdan çıkar, konum sırasını düzenle, ürün yerleri tablosu.
 
+## İrsaliye ve SKT
+- **SKT → + İrsaliye ekle**: kağıt irsaliyenin fotoğrafı ya da 3SC "Teslim edildi" mailinin ekran görüntüsü Gemini ile okunur (anahtar: Ayarlar → Fotoğraf okuma). Ürünler listemizle eşleştirilir; eşleşmeyenler elle seçilir ve bir sonraki sefere öğrenilir. Gıda dışı kalemler (şapka, yelek, Suma…) atlanır. Elle de girilebilir.
+- SKT başlangıcı: kağıt irsaliyede **Sevk Tarihi**, mailde **Sevkiyat Tarihi**. Son gün = sevk tarihi + ürünün SKT günü, o günün 23:59'una kadar. Saat 22:00'den sonra yarının tarihine göre bakılır.
+- Atık hesabı: son sayım (+ sayımdan sonra gelen irsaliyeler) − SKT'si geçmemiş irsaliyelerin toplamı. Önce gelen önce kullanılır varsayılır; atık önce Makeline'dan düşülür ("muhtemelen Makeline'daki"). Atık, ürünün SKT süresi kadar geriye irsaliye kaydı birikince hesaplanmaya başlar.
+- Çözülme günü olan ürünler (mozzarella gibi) gelişten sonraki günlerde "çözülüyor, henüz kullanmayın" diye görünür.
+- Sonuç ekranında SKT'li ürünlerin yanında "40 atık", "yarın SKT" ya da "SKT yok" yazar. İrsaliyeler 30 gün saklanır.
+
 ## Sonuç
 Şubenin **sonuç sırası** (Domino's sistemine giriş sırası) ile listelenir. Sisteme girilen ürüne dokunup işaretlenir; işaretler sayımla birlikte saklanır, başka telefondan da görünür. "Resim olarak paylaş" ile WhatsApp'a atılır.

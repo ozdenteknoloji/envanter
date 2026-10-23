@@ -37,6 +37,18 @@ service cloud.firestore {
       allow read: if aktif();
       allow write: if admin();
     }
+    // İrsaliyede elle eşleştirilen ürün adları: şube hesapları da öğretebilir.
+    match /genel/eslesme {
+      allow create, update: if aktif();
+    }
+
+    // İrsaliyeler: şube hesabı sadece kendi şubesininkileri görür ve ekler.
+    match /irsaliyeler/{id} {
+      allow read: if subede(resource.data.sube);
+      allow create: if subede(request.resource.data.sube);
+      allow update: if subede(resource.data.sube) && request.resource.data.sube == resource.data.sube;
+      allow delete: if subede(resource.data.sube);
+    }
 
     // Şube ayarları: yönetici her şeyi değiştirir. Şube hesabı kendi şubesinde sadece konumlar,
     // sonuç sırası, günlük liste ve şubeye özel koli içini değiştirebilir (adı, günü, açık/kapalı değil).
