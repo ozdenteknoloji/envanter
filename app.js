@@ -109,7 +109,7 @@ function eskiSayimlariSil() {
 }
 
 /* İçecek adları tek düzen: önce boyut/ambalaj, sonra ad (eski kayıtlar bir kez yeniden adlandırılır). */
-const AD_DUZEN = {"KOLA 1 LT": "1 LT KOLA", "KOLA KUTU": "KUTU KOLA", "DIET KOLA 1 LT": "1 LT DIET KOLA", "DIET KOLA KUTU": "KUTU DIET KOLA", "ZERO KOLA 1 LT": "1 LT ZERO KOLA", "ZERO KOLA KUTU": "KUTU ZERO KOLA", "FANTA 1 LT": "1 LT FANTA", "FANTA KUTU": "KUTU FANTA", "SPRITE 1 LT": "1 LT SPRITE", "SPRITE KUTU": "KUTU SPRITE", "AYRAN 1 LT": "1 LT AYRAN", "AYRAN 300 ML": "300 ML AYRAN", "AYRAN 200 ML": "200 ML AYRAN", "FUSE TEA ŞEFTALİ": "KUTU FUSE TEA ŞEFTALİ", "FUSE TEA LİMON": "KUTU FUSE TEA LİMON", "FUSE TEA MANGO": "KUTU FUSE TEA MANGO", "1LT FUSETEA LİMON": "1 LT FUSE TEA LİMON", "1LT FUSETEA ŞEFTALİ": "1 LT FUSE TEA ŞEFTALİ", "MONSTER ENERGY": "KUTU MONSTER ENERGY", "MONSTER ULTRA": "KUTU MONSTER ULTRA"};
+const AD_DUZEN = {"KOLA 1 LT": "1 LT KOLA", "KOLA KUTU": "KUTU KOLA", "DIET KOLA 1 LT": "1 LT DIET KOLA", "DIET KOLA KUTU": "KUTU DIET KOLA", "ZERO KOLA 1 LT": "1 LT ZERO KOLA", "ZERO KOLA KUTU": "KUTU ZERO KOLA", "FANTA 1 LT": "1 LT FANTA", "FANTA KUTU": "KUTU FANTA", "SPRITE 1 LT": "1 LT SPRITE", "SPRITE KUTU": "KUTU SPRITE", "AYRAN 1 LT": "1 LT AYRAN", "AYRAN 300 ML": "300 ML AYRAN", "AYRAN 200 ML": "200 ML AYRAN", "FUSE TEA ŞEFTALİ": "KUTU FUSE TEA ŞEFTALİ", "FUSE TEA LİMON": "KUTU FUSE TEA LİMON", "FUSE TEA MANGO": "KUTU FUSE TEA MANGO", "1LT FUSETEA LİMON": "1 LT FUSE TEA LİMON", "1LT FUSETEA ŞEFTALİ": "1 LT FUSE TEA ŞEFTALİ", "MONSTER ENERGY": "KUTU MONSTER ENERGY", "MONSTER ULTRA": "KUTU MONSTER ULTRA", "CAPPY KARIŞIK": "KUTU CAPPY KARIŞIK"};
 let adDuzenYapildi = false;
 function adlariDuzenle() {
   if (adDuzenYapildi || !admin() || !S.urunYuklendi) return; adDuzenYapildi = true;
@@ -433,7 +433,7 @@ function ayarlar() {
   $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => go({ ar: 'urunler' }); $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
 }
 async function seedYukle() {
-  const { SEED } = await import('./seed.js?v=3');
+  const { SEED } = await import('./seed.js?v=4');
   const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => adId[x.ad] = id);
   const yeni = Object.values(SEED.urunler).filter(x => !adId[x.ad]).length;
   const geri = Object.values(SEED.urunler).filter(x => adId[x.ad] && S.urunler[adId[x.ad]].aktif === false).length;
