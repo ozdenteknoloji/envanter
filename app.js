@@ -74,7 +74,7 @@ onAuthStateChanged(auth, async u => {
   render();
 });
 function baglan() {
-  if (!S.unsub.urun) S.unsub.urun = onSnapshot(doc(db, 'genel', 'urunler'), s => { S.urunler = (s.exists() && s.data().u) || {}; S.urunYuklendi = true; render(); }, hata);
+  if (!S.unsub.urun) S.unsub.urun = onSnapshot(doc(db, 'genel', 'urunler'), s => { S.urunler = (s.exists() && s.data().u) || {}; S.urunYuklendi = true; adlariDuzenle(); render(); }, hata);
   for (const k of Object.keys(S.unsub)) if (k.startsWith('sb:')) { S.unsub[k](); delete S.unsub[k]; }
   if (admin()) {
     S.unsub['sb:*'] = onSnapshot(collection(db, 'subeler'), s => { S.subeler = {}; s.forEach(d => S.subeler[d.id] = d.data()); subeSec(); render(); }, hata);
@@ -108,6 +108,15 @@ function eskiSayimlariSil() {
   const b = writeBatch(db); eski.forEach(x => b.delete(doc(db, 'sayimlar', x.id))); b.commit().catch(() => { });
 }
 
+/* İçecek adları tek düzen: önce boyut/ambalaj, sonra ad (eski kayıtlar bir kez yeniden adlandırılır). */
+const AD_DUZEN = {"KOLA 1 LT": "1 LT KOLA", "KOLA KUTU": "KUTU KOLA", "DIET KOLA 1 LT": "1 LT DIET KOLA", "DIET KOLA KUTU": "KUTU DIET KOLA", "ZERO KOLA 1 LT": "1 LT ZERO KOLA", "ZERO KOLA KUTU": "KUTU ZERO KOLA", "FANTA 1 LT": "1 LT FANTA", "FANTA KUTU": "KUTU FANTA", "SPRITE 1 LT": "1 LT SPRITE", "SPRITE KUTU": "KUTU SPRITE", "AYRAN 1 LT": "1 LT AYRAN", "AYRAN 300 ML": "300 ML AYRAN", "AYRAN 200 ML": "200 ML AYRAN", "FUSE TEA ŞEFTALİ": "KUTU FUSE TEA ŞEFTALİ", "FUSE TEA LİMON": "KUTU FUSE TEA LİMON", "FUSE TEA MANGO": "KUTU FUSE TEA MANGO", "1LT FUSETEA LİMON": "1 LT FUSE TEA LİMON", "1LT FUSETEA ŞEFTALİ": "1 LT FUSE TEA ŞEFTALİ", "MONSTER ENERGY": "KUTU MONSTER ENERGY", "MONSTER ULTRA": "KUTU MONSTER ULTRA"};
+let adDuzenYapildi = false;
+function adlariDuzenle() {
+  if (adDuzenYapildi || !admin() || !S.urunYuklendi) return; adDuzenYapildi = true;
+  const mevcut = new Set(Object.values(S.urunler).map(x => x.ad)); const p = {};
+  for (const [id, x] of Object.entries(S.urunler)) { const y = AD_DUZEN[x.ad]; if (y && !mevcut.has(y)) { p[`u.${id}.ad`] = y; mevcut.add(y); } }
+  if (Object.keys(p).length) updateDoc(doc(db, 'genel', 'urunler'), p).then(() => toast(`${Object.keys(p).length} içecek adı düzenlendi.`)).catch(() => { adDuzenYapildi = false; });
+}
 /* ================= Çizim ================= */
 function render() {
   const app = $('#app');
@@ -424,7 +433,7 @@ function ayarlar() {
   $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => go({ ar: 'urunler' }); $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
 }
 async function seedYukle() {
-  const { SEED } = await import('./seed.js?v=2');
+  const { SEED } = await import('./seed.js?v=3');
   const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => adId[x.ad] = id);
   const yeni = Object.values(SEED.urunler).filter(x => !adId[x.ad]).length;
   const geri = Object.values(SEED.urunler).filter(x => adId[x.ad] && S.urunler[adId[x.ad]].aktif === false).length;
