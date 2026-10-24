@@ -86,6 +86,12 @@ service cloud.firestore {
       allow delete: if aktif() && (resource.data.uid == request.auth.uid || admin());
     }
 
+    // Günlük SKT özetleri (sunucu yazar): şube hesabı kendi şubesinin özetini okur, WhatsApp paylaşımı için.
+    match /ozetler/{s} {
+      allow read: if subede(s);
+      allow write: if false;
+    }
+
     // Diğer her şey kapalı.
     match /{yol=**} {
       allow read, write: if false;

@@ -22,24 +22,16 @@ async function subeMesaj(id) {
   const H = hesapKur(S);
   if (mod === 'aksam') {
     const e = H.eksikIrsaliyeler(sb); if (!e.length) return null;
-    return { title: `${sb.ad || id}: irsaliye girilmedi`, body: `${e.map(x => x.sevk.split('-').reverse().slice(0, 2).join('.')).join(', ')} sevkiyatının irsaliyesi henüz girilmemiş.`, tag: 'irs' };
+    return { title: `${sb.ad || id}: irsaliye girilmedi`, body: `${e.map(x => x.sevk.split('-').reverse().slice(0, 2).join('.')).join(', ')} sevkiyatının irsaliyesi henüz girilmemiş.`, url: `./?git=irs&sube=${id}` };
   }
-  const R = H.bugun(), Y = H.gunEkle(R, 1), bugunSkt = [], yarinSkt = [], atik = [];
-  for (const u of Object.keys(urunler)) {
-    const x = urunler[u]; if (x.aktif === false || !x.sktGun) continue;
-    let d; try { d = H.sktDurum(u); } catch { continue; }
-    if (!d || d.sayimYok) continue;
-    const ad = x.ad || u, bi = x.birim || '';
-    // atık: süresi bitmiş stok
-    if (d.atik > 0) atik.push(`${ad} ${fmt(d.atik)}${bi ? ' ' + bi : ''}`);
-    for (const p of d.gecerli) if (p.a > 0) { if (p.son === R) bugunSkt.push(`${ad} ${fmt(p.a)}`); else if (p.son === Y) yarinSkt.push(`${ad} ${fmt(p.a)}`); }
-  }
-  if (!bugunSkt.length && !yarinSkt.length && !atik.length) return { title: `${sb.ad || id}: SKT özeti`, body: 'Bugün SKT yok ✓', tag: 'skt', temiz: true };
+  const o = H.sktOzet(); const metin = H.ozetMetin(sb.ad || id, o);
+  if (!kuru) await db.doc('ozetler/' + id).set({ tarih: H.bugun(), metin, zaman: new Date().toISOString() });
+  if (H.ozetBos(o)) return { title: `${sb.ad || id}: SKT özeti`, body: 'Bugün SKT yok ✓', temiz: true, url: `./?git=skt&sube=${id}` };
   const par = [];
-  if (atik.length) par.push('Atık: ' + atik.join(', '));
-  if (bugunSkt.length) par.push('Bugün SKT: ' + bugunSkt.join(', '));
-  if (yarinSkt.length) par.push('Yarın SKT: ' + yarinSkt.join(', '));
-  return { title: `${sb.ad || id}: SKT özeti`, body: par.join(' · '), tag: 'skt' };
+  if (o.atik.length) par.push('Atık: ' + o.atik.join(', '));
+  if (o.bugun.length) par.push('Bugün SKT: ' + o.bugun.join(', '));
+  if (o.yarin.length) par.push('Yarın SKT: ' + o.yarin.join(', '));
+  return { title: `${sb.ad || id}: SKT özeti`, body: par.join(' · '), url: `./?git=skt&sube=${id}` };
 }
 
 // Şube başına bir kez hesapla, her cihaza ilgili şubelerin mesajını gönder
@@ -60,7 +52,7 @@ for (const c of cihazlar) {
   const body = msg.length === 1 ? msg[0].body : msg.map(m => m.title.split(':')[0] + ' – ' + m.body).join('\n');
   console.log(`-> ${c.ad}: ${title} | ${body}`);
   if (kuru) continue;
-  try { await admin.messaging().send({ token: c.token, data: { title, body, tag: mod, url: './' }, webpush: { headers: { Urgency: 'high', TTL: '7200' } } }); if (c.test) await db.doc('cihazlar/' + c.token).update({ test: null }); }
+  try { await admin.messaging().send({ token: c.token, data: { title, body, tag: mod, url: msg.length === 1 && msg[0].url ? msg[0].url : (mod === 'aksam' ? './?git=irs' : './?git=skt') }, webpush: { headers: { Urgency: 'high', TTL: '7200' } } }); if (c.test) await db.doc('cihazlar/' + c.token).update({ test: null }); }
   catch (e) { console.error('hata', c.ad, e.code); if (/registration-token-not-registered|invalid-argument|invalid-registration/.test(e.code || '')) sil.push(c.token); }
 }
 for (const t of sil) await db.doc('cihazlar/' + t).delete();

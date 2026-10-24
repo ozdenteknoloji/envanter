@@ -81,5 +81,28 @@ export function hesapKur(S, now = () => new Date()) {
     return { stok, atik: tam ? r6(Math.max(0, kalan)) : null, eksik: !tam, eskiParti: tam && !tamEski && kalan > 0, gecerli, sy: st.sy, R };
   }
 
-  return { bugun, isGunu, haftaGunu, gunEkle, refTarih, saatTR, sube, varsGun, varsHaf, sayimdaMi, grupSirala, kapsam, deger, satirDara, koliIci, prm, sayildi, satirToplam, urunToplamlari, sonZaman, toplamlar, stokBul, sevkGunleri, oncekiSevk, eksikIrsaliyeler, sktDurum };
+  // Bir şubenin günlük SKT özeti (bildirim, WhatsApp metni ve uygulama aynı hesabı kullanır)
+  function sktOzet() {
+    const R = bugun(), Y = gunEkle(R, 1), o = { atik: [], bugun: [], yarin: [] };
+    const sayi = n => String(r6(n)).replace('.', ',');
+    for (const u of Object.keys(S.urunler)) {
+      const x = S.urunler[u]; if (x.aktif === false || !x.sktGun) continue;
+      let d; try { d = sktDurum(u); } catch { continue; } if (!d || d.sayimYok) continue;
+      const ad = x.ad || u, bi = x.birim === 'kg' ? ' kg' : '';
+      if (d.atik > 0) o.atik.push(`${ad} ${sayi(d.atik)}${bi}`);
+      for (const p of d.gecerli) if (p.a > 0) { if (p.son === R) o.bugun.push(`${ad} ${sayi(p.a)}${bi}`); else if (p.son === Y) o.yarin.push(`${ad} ${sayi(p.a)}${bi}`); }
+    }
+    return o;
+  }
+  const ozetBos = o => !o.atik.length && !o.bugun.length && !o.yarin.length;
+  function ozetMetin(ad, o) { // WhatsApp / bildirim metni
+    const t = bugun().split('-').reverse().slice(0, 2).join('.');
+    const l = [`*${ad} – SKT özeti (${t})*`];
+    if (ozetBos(o)) l.push('Bugün SKT yok ✓');
+    if (o.atik.length) l.push('🗑 Atık: ' + o.atik.join(', '));
+    if (o.bugun.length) l.push('⚠️ Bugün son gün: ' + o.bugun.join(', '));
+    if (o.yarin.length) l.push('⏰ Yarın son gün: ' + o.yarin.join(', '));
+    return l.join('\n');
+  }
+  return { sktOzet, ozetBos, ozetMetin, bugun, isGunu, haftaGunu, gunEkle, refTarih, saatTR, sube, varsGun, varsHaf, sayimdaMi, grupSirala, kapsam, deger, satirDara, koliIci, prm, sayildi, satirToplam, urunToplamlari, sonZaman, toplamlar, stokBul, sevkGunleri, oncekiSevk, eksikIrsaliyeler, sktDurum };
 }

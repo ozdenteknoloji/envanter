@@ -11,7 +11,8 @@ self.addEventListener('notificationclick', e => {
   const hedef = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
   e.waitUntil((async () => {
     const l = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const c of l) { try { await c.focus(); return; } catch (_) {} }
+    const q = new URL(hedef).search;
+    for (const c of l) { try { await c.focus(); c.postMessage({ git: q }); return; } catch (_) {} }
     await self.clients.openWindow(hedef);
   })());
 });

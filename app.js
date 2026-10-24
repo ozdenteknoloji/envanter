@@ -4,6 +4,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, creat
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   onSnapshot, collection, writeBatch, query, where, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, GIRIS_ALANI, VAPID_KEY } from "./config.js?v=3";
+import { hesapKur } from "./hesap.js?v=1";
 
 /* ================= Firebase ================= */
 const fbApp = initializeApp(firebaseConfig);
@@ -183,6 +184,37 @@ function adlariDuzenle() {
   if (Object.keys(p).length) updateDoc(doc(db, 'genel', 'urunler'), p).then(() => toast([ad ? `${ad} ürün adı düzenlendi` : '', Object.keys(p).some(k => k.endsWith('.aktif')) ? 'kopya XL soslar kaldırıldı' : '', ek ? `${ek} yeni içecek eklendi` : ''].filter(Boolean).join(' · ') + '.')).catch(() => { adDuzenYapildi = false; });
 }
 /* ================= Çizim ================= */
+// Bildirimden gelen yönlendirme: ?git=skt|irs&sube=id
+function gitOku(q) { const p = new URLSearchParams(q); if (p.get('git')) S.git = { git: p.get('git'), sube: p.get('sube') }; }
+gitOku(location.search);
+try { if (location.search.includes('git=')) history.replaceState(null, '', location.pathname); } catch (e) { }
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.git) { gitOku(e.data.git); render(); } });
+function gitUygula() {
+  const g = S.git; S.git = null;
+  if (g.sube && subeIds().includes(g.sube)) { S.subeSecildi = true; subeSec(g.sube); }
+  S.tab = 'skt'; S.ar = null; S.syId = null; gecmis.length = 0;
+  if (g.git === 'irs') setTimeout(() => { if (S.tab === 'skt') irsaliyeEkle(); }, 150);
+  if (g.git === 'skt') setTimeout(() => { if (S.tab === 'skt') ozetPaylas(); }, 150);
+}
+// SKT özetini WhatsApp'ta paylaş: şube seçilir, metin hazır gelir
+function ozetPaylas() {
+  const ids = subeIds(); const sec = new Set([S.subeId]);
+  openSheet(`<h2>SKT özetini paylaş</h2><p class="note">Şubeleri seçin; seçtiğiniz şubelerin özeti tek mesajda WhatsApp'a gider, grubu orada seçersiniz.</p>
+    <div class="card">${ids.map(id => `<label class="row" style="display:flex;gap:10px;align-items:center;padding:12px"><input type="checkbox" data-s="${id}" ${sec.has(id) ? 'checked' : ''}><b>${esc(S.subeler[id]?.ad || id)}</b></label>`).join('')}</div>
+    <div id="opM" class="note"></div><div class="btns"><button class="btn" id="opG">💬 WhatsApp'ta paylaş</button></div>`, el => {
+    el.querySelector('#opG').onclick = async () => {
+      const m = el.querySelector('#opM'); const secili = [...el.querySelectorAll('[data-s]:checked')].map(x => x.dataset.s);
+      if (!secili.length) { m.textContent = 'En az bir şube seçin.'; return; }
+      m.textContent = 'Hazırlanıyor…'; const parca = [];
+      for (const id of secili) {
+        if (id === S.subeId) { const H = hesapKur(S); parca.push(H.ozetMetin(S.subeler[id].ad || id, H.sktOzet())); continue; }
+        try { const d = await getDoc(doc(db, 'ozetler', id)); const v = d.exists() ? d.data() : null; parca.push(v && v.tarih === bugun() ? v.metin : `*${S.subeler[id]?.ad || id}*: özet henüz hazır değil (sabah 10:30'dan sonra oluşur). O şubeyi seçip tekrar açın.`); } catch (e) { parca.push(`*${S.subeler[id]?.ad || id}*: özet okunamadı.`); }
+      }
+      const url = 'https://wa.me/?text=' + encodeURIComponent(parca.join('\n\n'));
+      window.open(url, '_blank'); m.textContent = '';
+    };
+  });
+}
 function render() {
   const app = $('#app');
   document.body.classList.toggle('editing', !!S.syId);
@@ -190,6 +222,7 @@ function render() {
   if (!S.meYuklendi) { app.innerHTML = `<div class="empty"><b>Yükleniyor…</b></div>`; $('#tabs').hidden = true; return; }
   if (!S.me) return hesapYok();
   if (S.me.aktif === false) { app.innerHTML = `<div class="login"><div class="card p"><h3>Hesap kapalı</h3><p class="note">Bu hesap devre dışı bırakılmış.</p><div class="btns"><button class="btn alt" id="cik">Çıkış</button></div></div></div>`; $('#cik').onclick = () => signOut(auth); $('#tabs').hidden = true; return; }
+  if (S.git && S.me && S.urunYuklendi && subeIds().length && (!S.git.sube || S.subeler[S.git.sube])) gitUygula();
   if (!admin() && !S.subeSecildi && S.subelerYuklendi && subeIds().length > 1) return subeSecimEkrani();
   if (S.syId) return editor();
   sekmeler();
@@ -641,7 +674,7 @@ function sktEkrani() {
   const hicbir = !atik.length && !bugunL.length && !yarinL.length && !yakin.length && !coz.length;
   $('#app').innerHTML = ust(`${sb.ad} · SKT`, { alt: `${kisaT(R)}${R !== bg ? ' (yarın)' : ''}'e göre · ${son ? 'son sayım ' + kisaT(son.tarih) + ' ' + saat(sonZaman(son)) : 'sayım yok'}` }) + `<div class="pad">
     ${eksikIrsKutusu(sb)}
-    <div class="btns" style="margin:0 0 6px"><button class="btn" id="irEkle">+ İrsaliye ekle</button></div>
+    <div class="btns" style="margin:0 0 6px"><button class="btn" id="irEkle">+ İrsaliye ekle</button><button class="btn alt" id="opBtn">💬 Paylaş</button></div>
     ${!S.irsaliyeler.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">Henüz irsaliye yok</b><p class="note">SKT hesabı için gelen her irsaliyeyi ekleyin. Atık hesabı, ürünün SKT süresi kadar geriye irsaliye kaydı birikince başlar.</p></div>` : ''}
     ${sec('Atık yapılacak (SKT geçmiş)', atik, o => kart('var(--red)', '!', o.u, `${o.yer ? 'Muhtemelen <b>' + esc(o.yer) + '</b>' : 'Geçerli irsaliyelerden fazla'}${o.eski ? ' · irsaliyesi olmayan eski parti' : ''}`, o.q))}
     ${sec('Bugün son gün', bugunL, o => kart('#dc2626', '0', o.u, `${o.t} irsaliyesinden kalan · bugün 23:59'da biter`, o.q))}
@@ -653,7 +686,7 @@ function sktEkrani() {
     ${yok.length ? `<p class="note">Sayımı olmayan SKT'li ürünler: ${yok.map(urunAd).map(esc).join(', ')}</p>` : ''}
     <div class="sec">İrsaliyeler (son 30 gün)</div><div class="card">${irs || '<div class="empty" style="padding:20px">İrsaliye yok.</div>'}</div></div>`;
   bagla();
-  $('#irEkle').onclick = irsaliyeEkle; if ($('#irEkleU')) $('#irEkleU').onclick = irsaliyeEkle;
+  $('#opBtn').onclick = ozetPaylas; $('#irEkle').onclick = irsaliyeEkle; if ($('#irEkleU')) $('#irEkleU').onclick = irsaliyeEkle;
   $('#app').querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { const ir = S.irsaliyeler.find(x => x.id === b.dataset.ir); if (!ir) return; S.irsTaslak = { id: ir.id, tarih: ir.tarih, no: ir.no || '', kaynak: ir.kaynak, kalemler: (ir.kalemler || []).map(k => ({ ...k, gida: true })), digerleri: [] }; go({ ar: 'irs' }); });
 }
 // İrsaliyeden sadece SKT'si takip edilen ürünler (hamurlar, donuklar) okunur.
@@ -661,10 +694,10 @@ const sktUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && u.skt
 function irsaliyeEkle() {
   const anahtar = !!(S.ai.geminiKey || '').trim();
   openSheet(`<h2>İrsaliye ekle</h2><p class="note">Kağıt irsaliyenin fotoğrafı ya da 3SC "Siparişiniz teslim edildi" mailinin ekran görüntüsü. Sadece SKT'si takip edilen ürünler (${sktUrunleri().length}: hamurlar, tabanlar, donuklar) okunur. Birden fazla sayfa seçebilirsiniz.</p>
-    ${anahtar ? `<label class="btn" style="margin-top:12px">📷 Fotoğraf çek / seç<input type="file" accept="image/*" multiple id="irF" hidden></label>` : `<p class="note" style="color:var(--amber)">Fotoğraf okuma için yönetici Ayarlar → Fotoğraf okuma (Gemini) bölümüne anahtar girmeli.</p>`}
+    ${anahtar ? `<label class="btn" style="margin-top:12px">📷 Kamera ile çek<input type="file" accept="image/*" capture="environment" id="irK" hidden></label><label class="btn alt" style="margin-top:8px">🖼 Galeriden seç<input type="file" accept="image/*" multiple id="irF" hidden></label>` : `<p class="note" style="color:var(--amber)">Fotoğraf okuma için yönetici Ayarlar → Fotoğraf okuma (Gemini) bölümüne anahtar girmeli.</p>`}
     <div class="btns"><button class="btn alt" id="irE">Elle gir</button></div>`, el => {
     el.querySelector('#irE').onclick = () => { closeSheet(); S.irsTaslak = { tarih: bugun(), no: '', kaynak: 'elle', kalemler: [], digerleri: [] }; go({ ar: 'irs' }); };
-    const f = el.querySelector('#irF'); if (f) f.onchange = () => { const fs = [...f.files]; if (fs.length) irsaliyeOku(fs); };
+    for (const f of [el.querySelector('#irF'), el.querySelector('#irK')]) if (f) f.onchange = () => { const fs = [...f.files]; if (fs.length) irsaliyeOku(fs); };
   });
 }
 async function kucult(blob) { try { const bmp = await createImageBitmap(blob); const sc = Math.min(1, 1280 / Math.max(bmp.width, bmp.height)); if (sc >= 1 && blob.size < 400e3 && /jpeg|webp/.test(blob.type)) return blob; const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); return await new Promise(r => c.toBlob(r, 'image/jpeg', .72)); } catch (e) { return blob; } }
