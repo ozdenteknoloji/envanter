@@ -63,7 +63,7 @@ service cloud.firestore {
       allow read: if subede(s);
       allow write: if admin();
       allow update: if subede(s)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['konumlar', 'sonuc', 'gunluk', 'koliIci']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['konumlar', 'sonuc', 'gunluk', 'koliIci', 'isaret']);
     }
 
     // Sayımlar: belge adı "şube_tarih_tür". Şube hesabı sadece kendi şubesinin sayımlarını görür ve yazar.
