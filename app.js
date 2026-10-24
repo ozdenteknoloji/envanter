@@ -782,7 +782,7 @@ function siparisEkrani() {
   const g = gunler.find(x => x.tarih === S.spTarih); const D = g.sure; const ar = idealAralik(g.tarih, D);
   const id = `${S.subeId}_${g.tarih}`; const kayit = S.siparisler.find(x => x.id === id) || {}; S.spTaslak = S.spTaslak && S.spTaslak.id === id ? S.spTaslak : { id, ideal: { ...(kayit.ideal || {}) }, liste: { ...(kayit.liste || {}) }, buff: kayit.buff ?? 0.5, not: kayit.not || '' };
   const T = S.spTaslak; const buff = T.buff;
-  const urs = sonucListesi(sb).filter(u => S.urunler[u]?.siparis);
+  const urs = siparisListesi(sb);
   const satir = u => { const x = S.urunler[u]; const ideal = T.ideal[u]; const el = eldeBul(u); const k = x.sKoli || 1;
     const hedef = ideal != null ? r6(ideal / D * (D + buff)) : null; const koli = hedef != null && el ? r6((hedef - el.t) / k) : null; const oneri = koli != null ? Math.max(0, Math.ceil(koli)) : '';
     const n = v => v == null ? '–' : fmt(v, x.birim === 'adet' ? 'adet' : 'kg');
@@ -798,7 +798,7 @@ function siparisEkrani() {
     <div class="card p" style="background:var(--blue-soft);border-color:transparent">Domino's'tan ideali <b style="color:var(--blue)">${trTarih(ar.bas)} – ${trTarih(ar.son)}</b> aralığıyla alın (${D} gün).</div>
     ${eskiSayim ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${son ? `Son sayım ${trTarih(son.tarih)}.` : 'Sayım yok.'}</b><p class="note">Siparişten önce bugünün günlük sayımını yapın; "Elde" sütunu son sayımdan gelir.</p></div>` : ''}
     <div class="sec" style="padding-top:4px">Buff (gün)</div><div class="chips" style="flex-wrap:wrap">${BUFFLAR.map(b => `<button class="chip ${b === buff ? 'on' : ''}" data-b="${b}">${yaz(b)}</button>`).join('')}</div>
-    <div class="card" style="overflow-x:auto"><table class="st spT"><tr style="font-size:10px;color:var(--mut);text-transform:uppercase;font-weight:800"><td style="text-align:left">Ürün</td><td>İdeal</td><td>+Buff</td><td>Elde</td><td>Koli</td><td>Liste</td></tr>${urs.map(satir).join('') || '<tr><td colspan="6"><div class="empty" style="padding:16px">Sipariş listesinde ürün yok. Ayarlar → Ürünler listesinde "Sipariş" işaretleyin.</div></td></tr>'}</table></div>
+    <div class="card" style="overflow-x:auto"><table class="st spT"><tr style="font-size:10px;color:var(--mut);text-transform:uppercase;font-weight:800"><td style="text-align:left">Ürün <button id="spSira" title="Sipariş sırasını düzenle" style="border:0;background:none;font-size:14px;padding:0 4px;color:var(--blue)">✎</button></td><td>İdeal</td><td>+Buff</td><td>Elde</td><td>Koli</td><td>Liste</td></tr>${urs.map(satir).join('') || '<tr><td colspan="6"><div class="empty" style="padding:16px">Sipariş listesinde ürün yok. Ayarlar → Ürünler listesinde "Sipariş" işaretleyin.</div></td></tr>'}</table></div>
     <p class="note">Koli = (ideal ÷ ${D} × (${D} + buff) − elde) ÷ sipariş kolisi. Liste'yi siz yazarsınız; boş bırakılan satırda soluk rakam öneridir.</p>
     <label class="field"><span>Not (alacak / borç vb.)</span><input id="spN" value="${esc(T.not)}"></label>
     <div class="btns"><button class="btn" id="spP">Listeyi paylaş</button></div>
@@ -806,6 +806,7 @@ function siparisEkrani() {
   bagla();
   S.spT ||= {}; const kaydet = () => { clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, not: T.not, kim: benAd(), zaman: new Date().toISOString() }).catch(hata), 600); };
   $('#app').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { S.spTarih = b.dataset.t; S.spTaslak = null; render(); });
+  $('#spSira').onclick = () => go({ tab: 'ayarlar', syId: null, ar: 'siparissira:' + S.subeId });
   $('#app').querySelectorAll('[data-b]').forEach(b => b.onclick = () => { T.buff = +b.dataset.b; kaydet(); render(); });
   const girdiler = [...$('#app').querySelectorAll('.spI')];
   $('#app').querySelectorAll('.spI,.spL').forEach(inp => {
@@ -842,6 +843,7 @@ function ayarlar() {
     const izin = id => (S.me.subeler || []).includes(id);
     if (sayfa === 'konum' && izin(a1)) return konumAyar(a1, a2);
     if (sayfa === 'sonucsira' && izin(a1)) return sonucSiraAyar(a1);
+    if (sayfa === 'siparissira' && izin(a1)) return siparisSiraAyar(a1);
     if (sayfa === 'yerler' && izin(a1)) return yerlerAyar(a1);
     if (!S.subeId) { $('#app').innerHTML = ust('Ayarlar') + '<div class="empty"><b>Şube yok</b></div>'; return bagla(); }
     return subeAyar(S.subeId, true);
@@ -849,6 +851,7 @@ function ayarlar() {
   if (sayfa === 'sube') return subeAyar(a1);
   if (sayfa === 'konum') return konumAyar(a1, a2);
   if (sayfa === 'sonucsira') return sonucSiraAyar(a1);
+  if (sayfa === 'siparissira') return siparisSiraAyar(a1);
   if (sayfa === 'yerler') return yerlerAyar(a1);
   if (sayfa === 'urunler') return urunlerAyar();
   if (sayfa === 'kullanicilar') return kullanicilarAyar();
@@ -990,6 +993,17 @@ function konumdanCikar(sid, kid, u) {
 // Sonuç listesi: şubenin konumlarındaki ürünler; sonuç sırasındakiler o sırayla, yeni gelenler sona.
 function sonucListesi(s) { const var_ = subedekiUrunler(s); const l = (s.sonuc || []).filter(u => var_.has(u) && S.urunler[u] && S.urunler[u].aktif !== false); for (const u of [...var_].sort((a, b) => (S.urunler[a]?.sira ?? 999) - (S.urunler[b]?.sira ?? 999))) if (!l.includes(u) && S.urunler[u] && S.urunler[u].aktif !== false) l.push(u); return l; }
 function subedekiUrunler(s) { const set = new Set(); (s.konumlar || []).forEach(k => (k.satirlar || []).forEach(x => set.add(x.u))); return set; }
+function siparisListesi(s) { const var_ = sonucListesi(s).filter(u => S.urunler[u]?.siparis); const sr = (s.siparisSira || []).filter(u => var_.includes(u)); return [...sr, ...var_.filter(u => !sr.includes(u))]; }
+function siparisSiraAyar(sid) {
+  const s = S.subeler[sid]; if (!s) return; const l = siparisListesi(s); const kaydet = n => { s.siparisSira = n; subeKaydet(sid, { siparisSira: n }); };
+  $('#app').innerHTML = ust('Sipariş sırası', { geri: true, subeSecici: false, alt: `${s.ad} · ${l.length} ürün` }) + `<div class="pad">
+    <p class="note" style="margin:0 0 8px">Sipariş listesindeki ürün sırası. Sürükleyerek ya da sıra numarasına dokunup yeni numara yazarak değiştirin. Sadece bu şubeyi etkiler.</p>
+    <div class="card sl" id="ul">${l.map(u => `<div class="si"><span class="drag">≡</span><div class="nm">${esc(urunAd(u))}</div></div>`).join('') || '<div class="empty" style="padding:20px">Siparişte ürün yok.</div>'}</div>
+    ${(s.siparisSira || []).length ? '<div class="btns"><button class="btn alt" id="spSifir">Domino\'s sonuç sırasına döndür</button></div>' : ''}</div>`;
+  bagla();
+  suruklenebilir($('#ul'), (a, b) => { const n = [...l]; n.splice(b, 0, n.splice(a, 1)[0]); kaydet(n); render(); });
+  if ($('#spSifir')) $('#spSifir').onclick = () => { s.siparisSira = []; subeKaydet(sid, { siparisSira: [] }); render(); };
+}
 function sonucSiraAyar(sid) {
   const s = S.subeler[sid]; if (!s) return; const l = sonucListesi(s); const kaydet = n => { s.sonuc = n; subeKaydet(sid, { sonuc: n }); };
   const eksik = [];
