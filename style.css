@@ -135,3 +135,9 @@ body.editing .toast{bottom:auto;top:calc(128px + env(safe-area-inset-top))}
 .login p.c{text-align:center;color:var(--mut);margin:0 0 18px}
 .err{color:var(--red);font-size:13px;margin-top:8px;font-weight:600}
 .off{background:var(--amber-soft);color:var(--amber);font-size:12px;font-weight:700;text-align:center;padding:4px}
+/* sipariş */
+.spT td{padding:6px 4px;text-align:right;font-size:12.5px;white-space:nowrap}
+.spT td:first-child{white-space:normal}
+.spT input{font:inherit;font-size:15px;padding:6px;border:1px solid var(--line);border-radius:7px;text-align:right;background:var(--surface);color:var(--ink)}
+.spT input::placeholder{color:var(--mut);opacity:.6;font-weight:600}
+.spT td.neg{color:var(--mut)}.spT td.b{color:var(--blue);font-weight:800}

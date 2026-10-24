@@ -47,3 +47,9 @@ Sayım ekranında (sadece yönetici) konum sekmelerinin sonundaki **⚙** iki ke
 
 ## Sonuç
 Şubenin **sonuç sırası** (Domino's sistemine giriş sırası) ile listelenir. Sisteme girilen ürüne dokunup işaretlenir; işaretler sayımla birlikte saklanır, başka telefondan da görünür. "Resim olarak paylaş" ile WhatsApp'a atılır.
+
+## Sipariş
+- **Ayarlar → Şube → Sevkiyat takvimi**: sipariş günleri ve her siparişin kaç günü karşılayacağı. Varsayılan: Serik, Belek, Legends, Manavgat, Kumköy, Ankara İlkbahar → Pazartesi 5 gün, Perşembe 6 gün; Döşemealtı, Altınkale, Ankara Yıldız → Salı 5 gün, Cuma 6 gün.
+- **Sipariş** sekmesi: bir sonraki sipariş günü açılır. Domino's'tan ideali hangi aralıkla alacağınızı söyler (sipariş gününden 6 gün önce başlar, gün sayısı kadar; ör. 19'u Pazartesi → 13–17, 22'si Perşembe → 16–21).
+- İdealleri yazın, buff seçin. Koli = (ideal ÷ gün × (gün + buff) − elde) ÷ sipariş kolisi. Elde son sayımdan (ve sayımdan sonra gelen irsaliyelerden) gelir. Liste'yi siz yazarsınız; "Listeyi paylaş" ile WhatsApp'a atılır.
+- Ürünler'de **Sipariş** işareti ve **sipariş kolisi** (Domino's sevkiyat kolisi: sucuk 10 kg, mozzarella 12 kg, 7 hamur 12…) ayrıca tutulur.

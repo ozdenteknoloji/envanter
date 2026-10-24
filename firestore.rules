@@ -52,6 +52,13 @@ service cloud.firestore {
 
     // Şube ayarları: yönetici her şeyi değiştirir. Şube hesabı kendi şubesinde sadece konumlar,
     // sonuç sırası, günlük liste ve şubeye özel koli içini değiştirebilir (adı, günü, açık/kapalı değil).
+    match /siparisler/{id} {
+      allow read: if subede(resource.data.sube);
+      allow create: if subede(request.resource.data.sube);
+      allow update: if subede(resource.data.sube) && request.resource.data.sube == resource.data.sube;
+      allow delete: if subede(resource.data.sube);
+    }
+
     match /subeler/{s} {
       allow read: if subede(s);
       allow write: if admin();
