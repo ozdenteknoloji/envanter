@@ -125,7 +125,9 @@ const takvimVarsayilan = ad => { const a = ascii(ad).replace(/[^a-z]/g, ''); con
 let siparisKuruldu = false;
 function siparisKur() {
   if (siparisKuruldu || !admin() || !S.urunYuklendi || !S.subelerYuklendi || !Object.keys(S.urunler).length) return; siparisKuruldu = true;
-  if ((S.urunDuzen || 0) < 4) { const p = { duzen: 4 }; for (const [id, x] of Object.entries(S.urunler)) { const k = SIPARIS_KOLI[x.ad]; if (k != null && x.siparis == null) { p[`u.${id}.siparis`] = true; if (x.sKoli == null) p[`u.${id}.sKoli`] = k; } } updateDoc(doc(db, 'genel', 'urunler'), p).catch(() => { siparisKuruldu = false; }); }
+  if ((S.urunDuzen || 0) < 5) { const p = { duzen: 5 }; if ((S.urunDuzen || 0) < 4) { for (const [id, x] of Object.entries(S.urunler)) { const k = SIPARIS_KOLI[x.ad]; if (k != null && x.siparis == null) { p[`u.${id}.siparis`] = true; if (x.sKoli == null) p[`u.${id}.sKoli`] = k; } } } for (const [id, x] of Object.entries(S.urunler)) if (x.dara != null) p[`u.${id}.dara`] = deleteField();
+    for (const [sid, sb] of Object.entries(S.subeler)) if ((sb.konumlar || []).some(k => (k.satirlar || []).some(x => x.d != null))) subeKaydet(sid, { konumlar: sb.konumlar.map(k => ({ ...k, satirlar: (k.satirlar || []).map(({ d, ...x }) => x) })) });
+    updateDoc(doc(db, 'genel', 'urunler'), p).catch(() => { siparisKuruldu = false; }); }
   for (const [sid, sb] of Object.entries(S.subeler)) if (!sb.takvim) { const t = takvimVarsayilan(sb.ad); if (t) { sb.takvim = t; subeKaydet(sid, { takvim: t }); } }
 }
 function gunlukTasi() {
@@ -272,7 +274,7 @@ function satirToplam(sy, k, s) {
   const v = deger(sy, k, s.u); if (!sayildi(v)) return null;
   const { c, d } = prm(sy, s, k); const m = v.m ?? 0, x = v.x ?? 0;
   if (s.y === 'koli') return r6(m * (c || 1) + x);
-  if (s.y === 'tarti') return r6((v.m == null || v.m === 0 ? 0 : m - (v.k ?? 1) * d) + x);
+  if (s.y === 'tarti') return r6((v.m == null || v.m === 0 ? 0 : m - d) + x);
   return r6(m + x);
 }
 function urunToplamlari(sy, sb) {
@@ -347,15 +349,14 @@ function editor() {
     const ek = v.x != null || (cur && S.f.a === 'x') ? `<span class="ekx">+ ekstra ${cell('x', v.x)} ${u.birim === 'adet' ? 'adet' : 'kg'}</span>` : '';
     const ipucu = s.y === 'koli' ? `×${yaz(prm(sy, s, k.id).c)}` : s.y === 'tarti' ? 'tartı' : '';
     return `<tr class="${cur ? 'cur' : ''} ${sayildi(v) ? 'done' : ''}" data-i="${i}"><td class="n" data-i="${i}">${esc(u.ad)}<small>${ipucu}</small>${ek}</td>
-      <td>${cell('m', v.m)}</td>${tartiVar ? `<td>${s.y === 'tarti' ? cell('k', v.k, 'kap') : ''}</td>` : ''}
+      <td>${cell('m', v.m)}</td>
       <td class="tot ${tot == null ? 'e' : tot < 0 ? 'neg' : ''}">${tot == null ? '–' : fmt(tot, u.birim)}<small>${u.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`;
   }).join('');
   const cs = k.satirlar[S.f.i]; const cu = S.urunler[cs.u]; const pr = prm(sy, cs, k.id);
   let sol = `<b>${esc(cu.ad)}</b> · `;
   if (S.f.a === 'x') sol += `ekstra (${cu.birim === 'adet' ? 'adet' : 'kg'}) eklenir`;
-  else if (S.f.a === 'k') sol += `kap sayısı`;
   else if (cs.y === 'koli') sol += `koli = ${yaz(pr.c)} ${cu.birim === 'adet' ? 'adet' : 'kg'}`;
-  else if (cs.y === 'tarti') { const v = deger(sy, k.id, cs.u); sol += `dara ${yaz(pr.d)} kg` + (v.m != null ? ` · ${yaz(v.m)} − ${(v.k ?? 1) > 1 ? (v.k + '×') : ''}${yaz(pr.d)} = <b>${fmt(satirToplam(sy, k.id, cs) - (v.x ?? 0))}</b>` : ''); }
+  else if (cs.y === 'tarti') { const v = deger(sy, k.id, cs.u); sol += `dara ${yaz(pr.d)} kg` + (v.m != null ? ` · ${yaz(v.m)} − ${yaz(pr.d)} = <b>${fmt(satirToplam(sy, k.id, cs) - (v.x ?? 0))}</b>` : ''); }
   else sol += 'adet sayılır';
   const guncel = S.urunler[cs.u] || {}; const yeniD = satirDara(cs);
   const yeniC = koliIci(sy.sube, cs.u); const fark = (cs.y === 'koli' && sy.p && sy.p[cs.u] && yeniC !== (sy.p[cs.u].c ?? null)) || (cs.y === 'tarti' && (yeniD ?? 0) !== pr.d);
@@ -364,7 +365,7 @@ function editor() {
   const ilr = ilerleme(sy, sb);
   $('#app').innerHTML = `<div class="ed">${ust(`${sb.ad} · ${TUR[sy.tur]} sayım`, { geri: true, alt: `${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır`, sag: (sy.durum === 'bitti' ? '' : `<button id="bitirBtn" style="background:#fff;color:var(--blue)">Bitir</button>`) + `<button id="sonucBtn">Sonuç</button>` })}
     <div class="ktabs">${tabs}${ayarTus}</div>
-    <div class="edlist" id="edlist"><table class="et"><tr><th>Ürün</th><th>${k.satirlar.some(s => s.y === 'koli') ? 'Koli' : ''}${tartiVar ? (k.satirlar.some(s => s.y === 'koli') ? ' / ' : '') + 'Tartı' : ''}${!tartiVar && !k.satirlar.some(s => s.y === 'koli') ? 'Adet' : ''}</th>${tartiVar ? '<th>Kap</th>' : ''}<th>Toplam</th></tr>${rows}</table><div style="height:30px"></div></div>
+    <div class="edlist" id="edlist"><table class="et"><tr><th>Ürün</th><th>${k.satirlar.some(s => s.y === 'koli') ? 'Koli' : ''}${tartiVar ? (k.satirlar.some(s => s.y === 'koli') ? ' / ' : '') + 'Tartı' : ''}${!tartiVar && !k.satirlar.some(s => s.y === 'koli') ? 'Adet' : ''}</th><th>Toplam</th></tr>${rows}</table><div style="height:30px"></div></div>
     <div class="hint"><span>${sol}</span><span style="white-space:nowrap">Sonraki: <b>${esc(sonraki)}</b></span></div>
     ${sy.durum === 'bitti' ? `<div class="hint" style="flex-direction:column;align-items:stretch;gap:8px;padding:12px"><span><b style="color:var(--green)">✓ Sayım bitirildi</b> · ${esc(sy.bitiren || '')} ${saat(sy.bitis)} · ${ilr.say}/${ilr.n} satır sayıldı. Değiştirmek için tekrar açın.</span><button class="btn alt" id="acBtn">Sayımı tekrar aç</button></div>` : `<div class="kp">${['1', '2', '3', 'del', '4', '5', '6', 'ekstra', '7', '8', '9', 'geri', ',', '0', 'ileri'].map(x => `<button class="k ${x === 'del' || x === 'geri' ? 's' : ''} ${x === 'ekstra' ? 's ac' : ''} ${x === 'ileri' ? 'go' : ''}" data-key="${x}">${{ del: '⌫', ekstra: S.f.a === 'x' ? '✓ Ekstra' : '+ Ekstra', geri: '‹ Geri', ileri: 'İleri ›' }[x] || x}</button>`).join('')}`}</div></div>`;
   const el = $('#edlist'); el.scrollTop = eskiScroll;
@@ -832,7 +833,7 @@ function ayarlar() {
   $('#gAi').onclick = aiPanel; $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => go({ ar: 'urunler' }); $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
 }
 async function seedYukle() {
-  const { SEED } = await import('./seed.js?v=10');
+  const { SEED } = await import('./seed.js?v=11');
   const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => adId[x.ad] = id);
   const yeni = Object.values(SEED.urunler).filter(x => !adId[x.ad]).length;
   const geri = Object.values(SEED.urunler).filter(x => adId[x.ad] && S.urunler[adId[x.ad]].aktif === false).length;
@@ -899,7 +900,7 @@ function konumAyar(sid, kid) {
   const kaydet = sat => { const yeni = ks.map(x => x.id === kid ? { ...x, satirlar: sat } : x); s.konumlar = yeni; subeKaydet(sid, { konumlar: yeni }); };
   const sat = k.satirlar || [];
   $('#app').innerHTML = ust(k.ad, { geri: true, subeSecici: false, alt: `${s.ad} · ${sat.length} ürün` }) + `<div class="pad">
-    <p class="note" style="margin:0 0 8px">Sayımdaki sırayı raf sırasına göre sürükleyerek dizin. <b>Koli</b>: koli × koli içi · <b>Tartı</b>: brüt kg − kap darası (bu şubeye özel, dokunup düzeltin) · <b>Adet</b>: tek tek sayılır.</p>
+    <p class="note" style="margin:0 0 8px">Sayımdaki sırayı raf sırasına göre sürükleyerek dizin. <b>Koli</b>: koli × koli içi · <b>Tartı</b>: brüt kg − kap darası (bu şubeye özel, dokunup düzeltin; iki kap kullanılıyorsa toplam darayı yazın) · <b>Adet</b>: tek tek sayılır.</p>
     <div class="card sl" id="ul">${sat.map((x, i) => { const u = S.urunler[x.u]; return `<div class="si"><span class="drag">≡</span><div class="nm">${esc(u?.ad || '(silinmiş ürün)')}<small>${x.y === 'koli' ? `<a class="dl" data-koli="${x.u}">koli içi ${yaz(koliIci(sid, x.u) ?? 1)}${s.koliIci?.[x.u] != null ? ' · bu şubeye özel' : ''} ✎</a>` : x.y === 'tarti' ? (satirDara(x) != null ? `<a class="dl" data-dara="${i}">kap darası ${yaz(satirDara(x))} kg ✎</a>` : `<a class="dl" data-dara="${i}" style="color:var(--red)">kap darası girilmemiş ✎</a>`) : 'adet'}</small></div>
       <span class="seg">${['koli', 'tarti', 'adet'].map(y => `<button data-i="${i}" data-y="${y}" class="${x.y === y ? 'on' : ''}">${YON[y]}</button>`).join('')}</span><button class="x" data-sil="${i}">✕</button></div>`; }).join('') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div>
     <div class="btns"><button class="btn" id="uEkle">+ Ürün ekle</button></div>
