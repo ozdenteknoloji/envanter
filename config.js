@@ -13,4 +13,4 @@ export const firebaseConfig = {
 export const GIRIS_ALANI = "envanter-merkezi.app";
 
 // Anlık bildirim (Web Push) anahtarı: Firebase → Proje ayarları → Cloud Messaging → Web Push sertifikaları → Anahtar çifti (genel anahtar).
-export const VAPID_KEY = "";
+export const VAPID_KEY = "BAowF18GJId99CR2jevjDMYlHgs7esWqa6V9uZrTZl73D6JoyRoUEzPUSp7E_fhAOgcg0sL95noY0BWJc8TGJSY";

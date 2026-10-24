@@ -3,7 +3,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, creat
   updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   onSnapshot, collection, writeBatch, query, where, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, GIRIS_ALANI, VAPID_KEY } from "./config.js?v=2";
+import { firebaseConfig, GIRIS_ALANI, VAPID_KEY } from "./config.js?v=3";
 
 /* ================= Firebase ================= */
 const fbApp = initializeApp(firebaseConfig);
