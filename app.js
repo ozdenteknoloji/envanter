@@ -260,7 +260,7 @@ const syBul = id => S.sayimlar.find(s => s.id === id);
 const varsGun = x => !!x.gunluk, varsHaf = x => x.haftalik !== false;
 function sayimdaMi(sb, u, tur) { const x = S.urunler[u]; if (!x) return false; const o = sb.isaret?.[u]?.[tur === 'gunluk' ? 'g' : 'h']; return o != null ? o : (tur === 'gunluk' ? varsGun(x) : varsHaf(x)); }
 function kapsam(sb, tur) { // sayımda görünen konumlar ve satırlar
-  return (sb.konumlar || []).map(k => ({ ...k, satirlar: (k.satirlar || []).filter(s => { const x = S.urunler[s.u]; return x && x.aktif !== false && sayimdaMi(sb, s.u, tur); }) })).filter(k => k.satirlar.length);
+  return (sb.konumlar || []).map(k => ({ ...k, satirlar: (k.satirlar || []).filter(s => { const x = S.urunler[s.u]; return x && x.aktif !== false && (tur === 'gunluk' ? sayimdaMi(sb, s.u, 'gunluk') : true); }) })).filter(k => k.satirlar.length);
 }
 const deger = (sy, k, u) => (sy.v && sy.v[k] && sy.v[k][u]) || {};
 const satirDara = s => s.d ?? S.urunler[s.u]?.dara ?? null;
@@ -806,7 +806,6 @@ function ayarlar() {
     const izin = id => (S.me.subeler || []).includes(id);
     if (sayfa === 'konum' && izin(a1)) return konumAyar(a1, a2);
     if (sayfa === 'sonucsira' && izin(a1)) return sonucSiraAyar(a1);
-    if (sayfa === 'gunluk' && izin(a1)) return gunlukAyar(a1);
     if (sayfa === 'yerler' && izin(a1)) return yerlerAyar(a1);
     if (!S.subeId) { $('#app').innerHTML = ust('Ayarlar') + '<div class="empty"><b>Şube yok</b></div>'; return bagla(); }
     return subeAyar(S.subeId, true);
@@ -814,7 +813,6 @@ function ayarlar() {
   if (sayfa === 'sube') return subeAyar(a1);
   if (sayfa === 'konum') return konumAyar(a1, a2);
   if (sayfa === 'sonucsira') return sonucSiraAyar(a1);
-  if (sayfa === 'gunluk') return gunlukAyar(a1);
   if (sayfa === 'yerler') return yerlerAyar(a1);
   if (sayfa === 'urunler') return urunlerAyar();
   if (sayfa === 'kullanicilar') return kullanicilarAyar();
@@ -878,7 +876,6 @@ function subeAyar(id, kok) {
     <div class="sec">Listeler</div><div class="card">
       <button class="row" id="sYer"><div class="m"><b>Ürün yerleri</b><span>Hangi ürün hangi konumda sayılır · tek ekranda</span></div><span class="ch">›</span></button>
       <button class="row" id="sTak" ${yon ? '' : 'hidden'}><div class="m"><b>Sevkiyat takvimi</b><span>${(s.takvim || []).length ? (s.takvim || []).map(t => `${GUNU[t.gun]} (${t.sure} gün)`).join(' · ') : 'girilmemiş'}</span></div><span class="ch">›</span></button>
-      <button class="row" id="sGH"><div class="m"><b>Günlük / haftalık listesi</b><span>${(() => { const n = Object.keys(s.isaret || {}).length; return n ? `${n} ürün bu şubede farklı` : 'hepsi genel ayarla aynı'; })()}</span></div><span class="ch">›</span></button>
       <button class="row" id="sSon"><div class="m"><b>Sonuç sırası</b><span>${sonucListesi(s).length} ürün · Domino's sistemindeki sıra</span></div><span class="ch">›</span></button></div>
     <div class="sec" ${yon ? '' : 'hidden'}>Diğer</div><div class="card" ${yon ? '' : 'hidden'}><button class="row" id="sSil"><div class="m"><b style="color:var(--red)">Şubeyi sil</b><span>Şube, ayarları, sayımları ve irsaliyeleri silinir</span></div></button><button class="row" id="sKop"><div class="m"><b>Başka şubeden kopyala</b><span>Konumlar, sonuç sırası ve günlük liste değiştirilir</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
@@ -892,7 +889,7 @@ function subeAyar(id, kok) {
   $('#kEkle').onclick = () => openSheet(`<h2>Konum ekle</h2><label class="field"><span>Konum adı</span><input id="ka" placeholder="Örn. Soğuk Hava Deposu"></label><div class="btns"><button class="btn" id="kk">Ekle</button></div>`, el => {
     el.querySelector('#kk').onclick = () => { const ad = el.querySelector('#ka').value.trim(); if (!ad) return; let kid = slug(ad); while (ks.find(k => k.id === kid)) kid += '2'; const yeni = [...ks, { id: kid, ad, satirlar: [] }]; subeKaydet(id, { konumlar: yeni }); closeSheet(); go({ ar: `konum:${id}:${kid}` }); };
   });
-  $('#sYer').onclick = () => go({ ar: 'yerler:' + id, yerAra: '', yerFiltre: 'hepsi' }); $('#sSon').onclick = () => go({ ar: 'sonucsira:' + id }); $('#sGH').onclick = () => go({ ar: 'gunluk:' + id }); if (yon) $('#sTak').onclick = () => takvimPanel(id);
+  $('#sYer').onclick = () => go({ ar: 'yerler:' + id, yerAra: '', yerFiltre: 'hepsi' }); $('#sSon').onclick = () => go({ ar: 'sonucsira:' + id }); if (yon) $('#sTak').onclick = () => takvimPanel(id);
   $('#sKop').onclick = () => openSheet(`<h2>Başka şubeden kopyala</h2><p class="note">${esc(s.ad)} şubesinin konumları, sonuç sırası ve günlük listesi seçtiğiniz şubeninkiyle değiştirilecek.</p><label class="field"><span>Kaynak şube</span><select id="kq">${Object.keys(S.subeler).filter(x => x !== id).map(x => `<option value="${x}">${esc(S.subeler[x].ad)}</option>`).join('')}</select></label><div class="btns"><button class="btn" id="kz">Kopyala</button></div>`, el => {
     el.querySelector('#kz').onclick = () => { const k = S.subeler[el.querySelector('#kq').value]; if (!k) return; subeKaydet(id, { konumlar: JSON.parse(JSON.stringify(k.konumlar || [])), sonuc: [...(k.sonuc || [])], gunluk: [...(k.gunluk || [])], isaret: JSON.parse(JSON.stringify(k.isaret || {})) }); closeSheet(); toast('Kopyalandı.'); };
   });
@@ -969,13 +966,15 @@ function yerlerAyar(sid) {
   const gor = u => (f !== 'yok' || !yer[u.id]) && (!q || ascii(u.ad).includes(ascii(q)));
   const eskiY = window.scrollY;
   $('#app').innerHTML = ust('Ürün yerleri', { geri: true, subeSecici: false, alt: `${s.ad} · ${l.length} ürün · ${ks.length} konum` }) + `<div class="pad">
-    <p class="note" style="margin:0 0 8px">Konuma dokununca ürün o konumun sonuna eklenir, tekrar dokununca çıkar. Sırayı konum sayfasından sürükleyerek değiştirin.</p>
+    <p class="note" style="margin:0 0 8px">Konuma dokununca ürün o konumun sonuna eklenir, tekrar dokununca çıkar. <b>Günlük</b> işaretli ürünler günlük sayımda da sayılır (haftalıkta zaten hepsi sayılır); turuncu çerçeve genel ayardan farklı olduğunu gösterir. Sırayı konum sayfasından sürükleyerek değiştirin.</p>
     <div class="btns" style="margin:0 0 10px" ${admin() ? '' : 'hidden'}><button class="btn alt" id="yOzel">+ Sadece ${esc(s.ad)}'e özel yeni ürün</button></div>
     <input class="search" id="ya" placeholder="Ara…" value="${esc(q)}">
     <div class="chips"><button class="chip ${f === 'hepsi' ? 'on' : ''}" data-f="hepsi">Hepsi</button><button class="chip ${f === 'yok' ? 'on' : ''}" data-f="yok">Bu şubede olmayanlar (${yok})</button></div>
     <div class="card">${l.map(u => `<div class="yr" data-ad="${esc(ascii(u.ad))}" ${gor(u) ? '' : 'hidden'} style="padding:10px 12px;border-bottom:1px solid var(--line)"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1"><b style="font-size:14px">${esc(u.ad)}</b>${u.sube ? ' <span class="tag b">sadece bu şube</span>' : ''}${yer[u.id] ? '' : ' <span class="tag a">bu şubede yok</span>'}</div>${yer[u.id] || (s.sonuc || []).includes(u.id) ? `<button class="chip" style="padding:4px 9px;font-size:11.5px;color:var(--red);border-color:var(--red)" data-cik="${u.id}">Şubeden çıkar</button>` : ''}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${ks.map(k => { const on = yer[u.id]?.has(k.id); return `<button class="chip ${on ? 'on' : ''}" style="padding:5px 9px;font-size:12px" data-u="${u.id}" data-k="${k.id}">${on ? '✓ ' : ''}${esc(k.ad)}</button>`; }).join('')}</div></div>`).join('') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div></div>`;
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${ks.map(k => { const on = yer[u.id]?.has(k.id); return `<button class="chip ${on ? 'on' : ''}" style="padding:5px 9px;font-size:12px" data-u="${u.id}" data-k="${k.id}">${on ? '✓ ' : ''}${esc(k.ad)}</button>`; }).join('')}${yer[u.id] ? (() => { const g = sayimdaMi(s, u.id, 'gunluk'), o = s.isaret?.[u.id]?.g; return `<button class="chip ${g ? 'on' : ''}" style="padding:5px 9px;font-size:12px;margin-left:auto${o != null ? ';outline:2px solid var(--amber)' : ''}" data-gun="${u.id}">${g ? '✓ ' : ''}Günlük</button>`; })() : ''}</div></div>`).join('') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div></div>`;
   bagla(); window.scrollTo(0, eskiY);
+  $('#app').querySelectorAll('[data-gun]').forEach(b => b.onclick = () => { const u = b.dataset.gun, x = S.urunler[u]; const o = { ...(s.isaret || {}) }; const e = { ...(o[u] || {}) }; const yeni = !sayimdaMi(s, u, 'gunluk');
+    if (yeni === varsGun(x)) delete e.g; else e.g = yeni; delete e.h; if (Object.keys(e).length) o[u] = e; else delete o[u]; s.isaret = o; subeKaydet(sid, { isaret: o }); render(); });
   $('#ya').oninput = e => { S.yerAra = e.target.value; const qq = ascii(e.target.value); $('#app').querySelectorAll('.yr').forEach(r => { const u = l.find(x => ascii(x.ad) === r.dataset.ad); r.hidden = !((f !== 'yok' || !yer[u?.id]) && (!qq || r.dataset.ad.includes(qq))); }); };
   $('#app').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.yerFiltre = b.dataset.f; render(); });
   $('#yOzel').onclick = () => urunPanel(null, { sube: sid });
@@ -985,32 +984,13 @@ function yerlerAyar(sid) {
     Object.assign(s, { konumlar: kon, sonuc: son, gunluk: gun }); subeKaydet(sid, { konumlar: kon, sonuc: son, gunluk: gun }); toast(`${urunAd(u)} ${s.ad}'den çıkarıldı.`); render(); });
   $('#app').querySelectorAll('.yr [data-u]').forEach(b => b.onclick = () => { const u = b.dataset.u, k = b.dataset.k; if (yer[u]?.has(k)) konumdanCikar(sid, k, u); else konumaEkle(sid, k, [u]); render(); });
 }
-function gunlukAyar(sid) {
-  const s = S.subeler[sid]; if (!s) return; const urs = [...subedekiUrunler(s)].filter(u => S.urunler[u] && S.urunler[u].aktif !== false).sort((a, b) => (S.urunler[a]?.sira ?? 999) - (S.urunler[b]?.sira ?? 999));
-  const farkli = () => Object.keys(s.isaret || {}).length;
-  const chip = (u, t) => { const on = sayimdaMi(s, u, t === 'g' ? 'gunluk' : 'haftalik'); const o = s.isaret?.[u]?.[t]; return `<button class="chip ${on ? 'on' : ''}" style="padding:5px 10px;font-size:12px${o != null ? ';outline:2px solid var(--amber)' : ''}" data-u="${u}" data-t="${t}">${on ? '✓ ' : ''}${t === 'g' ? 'Günlük' : 'Haftalık'}</button>`; };
-  $('#app').innerHTML = ust('Günlük / haftalık liste', { geri: true, subeSecici: false, alt: `${s.ad} · ${farkli()} ürün genelden farklı` }) + `<div class="pad">
-    <p class="note" style="margin:0 0 8px">Hangi ürünün günlük ve haftalık sayımda sayılacağını bu şube için belirleyin. Varsayılan, yöneticinin <b>Ürünler</b> ekranındaki genel ayardır. Genelden farklı yaptığınız seçimin çevresi <b style="color:var(--amber)">turuncu</b> görünür; tekrar dokunursanız genel ayara döner.</p>
-    <input class="search" id="ua" placeholder="Ara…">
-    <div class="card">${urs.map(u => `<div class="row" style="cursor:default" data-ad="${esc(ascii(urunAd(u)))}"><div class="m"><b>${esc(urunAd(u))}</b></div><div style="display:flex;gap:6px">${chip(u, 'g')}${chip(u, 'h')}</div></div>`).join('') || '<div class="empty" style="padding:20px">Önce konumlara ürün ekleyin.</div>'}</div>
-    ${farkli() ? '<div class="btns"><button class="btn alt" id="gSif">Hepsini genel ayara döndür</button></div>' : ''}</div>`;
-  bagla();
-  $('#ua').oninput = e => { const q = ascii(e.target.value); $('#app').querySelectorAll('[data-ad]').forEach(l => l.hidden = q && !l.dataset.ad.includes(q)); };
-  $('#app').querySelectorAll('[data-u][data-t]').forEach(b => b.onclick = () => {
-    const u = b.dataset.u, t = b.dataset.t, x = S.urunler[u]; const var_ = t === 'g' ? varsGun(x) : varsHaf(x); const o = { ...(s.isaret || {}) }; const e = { ...(o[u] || {}) };
-    const simdi = sayimdaMi(s, u, t === 'g' ? 'gunluk' : 'haftalik'); const yeni = !simdi;
-    if (yeni === var_) delete e[t]; else e[t] = yeni;
-    if (Object.keys(e).length) o[u] = e; else delete o[u];
-    s.isaret = o; subeKaydet(sid, { isaret: o }); const y = window.scrollY; render(); window.scrollTo(0, y); });
-  if ($('#gSif')) $('#gSif').onclick = () => { s.isaret = {}; subeKaydet(sid, { isaret: {} }); render(); };
-}
 function urunlerAyar() {
   const tum = urunlerSirali(); const l = tum.filter(u => u.aktif !== false); const kalk = tum.filter(u => u.aktif === false); const kullanim = {}; Object.values(S.subeler).forEach(s => subedekiUrunler(s).forEach(u => kullanim[u] = (kullanim[u] || 0) + 1));
   $('#app').innerHTML = ust('Ürünler', { geri: true, subeSecici: false, alt: `${l.length} ürün · bütün şubeler için ortak` }) + `<div class="pad">
     <div class="btns" style="margin:0 0 10px"><button class="btn" id="uYeni">+ Yeni ürün</button><button class="btn alt" id="uExcel">Excel'den yükle</button></div>
-    <input class="search" id="ua" placeholder="Ara…"><p class="note" style="margin:0 0 8px"><b>Günlük</b> / <b>Haftalık</b>: ürünün hangi sayımda sayılacağı. <b>Sipariş</b>: sipariş listesinde çıkar. Burası <b>bütün şubeler için varsayılan</b>; her şube kendi ayarlarından (Günlük / haftalık listesi) kendi için değiştirebilir.</p>
+    <input class="search" id="ua" placeholder="Ara…"><p class="note" style="margin:0 0 8px"><b>Günlük</b>: günlük sayımda sayılsın (haftalıkta zaten hepsi sayılır). <b>Sipariş</b>: sipariş listesinde çıkar. Burası <b>bütün şubeler için varsayılan</b>; her şube kendi ayarlarından (Günlük / haftalık listesi) kendi için değiştirebilir.</p>
     <div class="card">${l.map(u => `<div class="row" data-ad="${esc(ascii(u.ad))}" style="cursor:default"><div class="m" data-u="${u.id}" style="cursor:pointer"><b>${esc(u.ad)}${u.sube ? ` <span class="tag b">sadece ${esc(S.subeler[u.sube]?.ad || u.sube)}</span>` : ''}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''} · ${kullanim[u.id] || 0} şube${u.sktGun ? ` · <span style="color:var(--amber);font-weight:700">SKT ${u.sktGun} gün</span>` : ''}</span></div>
-      <button class="chip ${u.gunluk ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="gunluk" data-id="${u.id}">${u.gunluk ? '✓ ' : ''}Günlük</button><button class="chip ${u.haftalik !== false ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="haftalik" data-id="${u.id}">${u.haftalik !== false ? '✓ ' : ''}Haftalık</button><button class="chip ${u.siparis ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="siparis" data-id="${u.id}">${u.siparis ? '✓ ' : ''}Sipariş</button></div>`).join('')}</div>
+      <button class="chip ${u.gunluk ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="gunluk" data-id="${u.id}">${u.gunluk ? '✓ ' : ''}Günlük</button><button class="chip ${u.siparis ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="siparis" data-id="${u.id}">${u.siparis ? '✓ ' : ''}Sipariş</button></div>`).join('')}</div>
     ${kalk.length ? `<details class="card" style="padding:0"><summary class="row" style="list-style:none"><div class="m"><b>Kaldırılan ürünler (${kalk.length})</b><span>Sayımlarda ve listelerde görünmezler · dokunup geri alabilirsiniz</span></div><span class="ch">▾</span></summary>${kalk.map(u => `<button class="row" data-u="${u.id}" data-ad="${esc(ascii(u.ad))}"><div class="m"><b style="color:var(--mut)">${esc(u.ad)}</b><span>${u.kaldirma ? 'kaldırıldı ' + trTarih(u.kaldirma.slice(0, 10)) : 'kaldırıldı'}</span></div></button>`).join('')}</details>` : ''}</div>`;
   bagla();
   $('#ua').oninput = e => { const q = ascii(e.target.value); $('#app').querySelectorAll('[data-ad]').forEach(l => l.hidden = q && !l.dataset.ad.includes(q)); };
@@ -1030,7 +1010,6 @@ function urunPanel(id, opt = {}) {
     <label class="field"><span>SKT (gün)</span><input id="ps" inputmode="numeric" value="${n(u.sktGun)}" placeholder="takip yoksa boş"></label>
     <label class="field"><span>Çözülme (gün)</span><input id="pc" inputmode="numeric" value="${n(u.cozulmeGun)}" placeholder="yoksa boş"></label></div>
     <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pGn" ${u.gunluk ? 'checked' : ''}> Günlük sayımda sayılır</label>
-    <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pHf" ${u.haftalik !== false ? 'checked' : ''}> Haftalık sayımda sayılır</label>
     <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pSp" ${u.siparis ? 'checked' : ''}> Sipariş listesinde</label>
     <label class="field"><span>Sipariş kolisi (Domino's sevkiyat kolisi, ${u.birim === 'adet' ? 'adet' : 'kg'})</span><input id="pSk" inputmode="decimal" value="${n(u.sKoli)}" placeholder="örn. sucuk 10, 7 hamur 12"></label>
     ${konumAdlari.length ? `<div class="sec" style="padding-left:0">Bütün şubelerde şu konumlara ekle</div><div class="chips" style="flex-wrap:wrap" id="pKon">${konumAdlari.map(a => `<button class="chip" data-kad="${esc(a)}">${esc(a)}</button>`).join('')}</div><p class="note" style="margin-top:0">Seçmezseniz ürün listede durur, şubelere sonra Ürün yerleri'nden yerleştirirsiniz.</p>` : ''}
@@ -1044,7 +1023,7 @@ function urunPanel(id, opt = {}) {
       const ad = el.querySelector('#pa').value.trim().toLocaleUpperCase('tr-TR'); if (!ad) return el.querySelector('#pe').textContent = 'Ürün adı yazın.';
       if (Object.entries(S.urunler).some(([k, x]) => k !== id && x.ad === ad && x.aktif !== false && (!x.sube || !u.sube || x.sube === u.sube))) return el.querySelector('#pe').textContent = 'Bu adda ürün zaten var.';
       const ni = v => { const x = sayiOku(v); return x == null ? null : Math.round(x); };
-      const data = { ad, birim: el.querySelector('#pb').value, koliIci: sayiOku(el.querySelector('#pk').value), sktGun: ni(el.querySelector('#ps').value), cozulmeGun: ni(el.querySelector('#pc').value), gunluk: el.querySelector('#pGn').checked, haftalik: el.querySelector('#pHf').checked, siparis: el.querySelector('#pSp').checked, sKoli: sayiOku(el.querySelector('#pSk').value), aktif: true };
+      const data = { ad, birim: el.querySelector('#pb').value, koliIci: sayiOku(el.querySelector('#pk').value), sktGun: ni(el.querySelector('#ps').value), cozulmeGun: ni(el.querySelector('#pc').value), gunluk: el.querySelector('#pGn').checked, siparis: el.querySelector('#pSp').checked, sKoli: sayiOku(el.querySelector('#pSk').value), aktif: true };
       if (id && u.dara != null) data.dara = u.dara; if (u.sube) data.sube = u.sube;
       const yid = id || yeniId('u'); if (!id) data.sira = Math.max(0, ...Object.values(S.urunler).map(x => x.sira ?? 0)) + 1; else data.sira = u.sira ?? 999;
       try {
