@@ -65,7 +65,7 @@ function setTab(t) { commitBuf(); gecmis.length = 0; S.tab = t; S.ar = null; S.s
 /* ================= Giriş ================= */
 onAuthStateChanged(auth, async u => {
   for (const f of Object.values(S.unsub)) try { f(); } catch (e) { }
-  S.unsub = {}; S.user = u; S.me = null; S.tab = 'sayim'; S.ar = null; S.syId = null; S.sonucId = null; S.subeId = null; S.f = null; S.buf = null; gecmis.length = 0; S.meYuklendi = false; S.subeler = {}; S.sayimlar = []; S.urunler = {}; S.urunYuklendi = false;
+  S.unsub = {}; S.user = u; S.subeSecildi = false; S.me = null; S.tab = 'sayim'; S.ar = null; S.syId = null; S.sonucId = null; S.subeId = null; S.f = null; S.buf = null; gecmis.length = 0; S.meYuklendi = false; S.subeler = {}; S.sayimlar = []; S.urunler = {}; S.urunYuklendi = false;
   if (!u) return render();
   S.unsub.me = onSnapshot(doc(db, 'kullanicilar', u.uid), async s => {
     S.me = s.exists() ? s.data() : null; S.meYuklendi = true;
@@ -181,6 +181,7 @@ function render() {
   if (!S.meYuklendi) { app.innerHTML = `<div class="empty"><b>Yükleniyor…</b></div>`; $('#tabs').hidden = true; return; }
   if (!S.me) return hesapYok();
   if (S.me.aktif === false) { app.innerHTML = `<div class="login"><div class="card p"><h3>Hesap kapalı</h3><p class="note">Bu hesap devre dışı bırakılmış.</p><div class="btns"><button class="btn alt" id="cik">Çıkış</button></div></div></div>`; $('#cik').onclick = () => signOut(auth); $('#tabs').hidden = true; return; }
+  if (!admin() && !S.subeSecildi && S.subelerYuklendi && subeIds().length > 1) return subeSecimEkrani();
   if (S.syId) return editor();
   sekmeler();
   if (S.tab === 'ayarlar') return ayarlar();
@@ -211,6 +212,14 @@ function bagla() {
   const h = $('#hesapBtn'); if (h) h.onclick = hesapPaneli;
 }
 window.addEventListener('online', () => render()); window.addEventListener('offline', () => render());
+function subeSecimEkrani() {
+  $('#tabs').hidden = true;
+  $('#app').innerHTML = `<div class="login"><div class="card p"><h3>Hangi şubede sayım yapmak istiyorsun?</h3><p class="note" style="margin:4px 0 10px">${esc(S.me?.ad || '')}, birden fazla şubeye bakıyorsun. Şubeyi seç, o şubenin menüsü açılsın.</p>
+    <div class="card" style="margin-top:6px">${subeIds().map(id => `<button class="row" data-id="${id}"><div class="m"><b>${esc(S.subeler[id].ad)}</b></div><span class="ch">›</span></button>`).join('')}</div>
+    <div class="btns"><button class="btn alt" id="cik">Çıkış</button></div></div></div>`;
+  $('#app').querySelectorAll('[data-id]').forEach(b => b.onclick = () => { S.subeSecildi = true; S.tab = 'sayim'; S.ar = null; S.syId = null; subeSec(b.dataset.id); render(); });
+  $('#cik').onclick = () => signOut(auth);
+}
 function subeSecPaneli() {
   openSheet(`<h2>Şube seç</h2><div class="card" style="margin-top:10px">${subeIds().map(id => `<button class="row" data-id="${id}"><div class="m"><b>${esc(S.subeler[id].ad)}</b></div>${id === S.subeId ? '<span class="tag b">Seçili</span>' : ''}</button>`).join('')}</div>`, el => {
     el.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { closeSheet(); subeSec(b.dataset.id); render(); });
