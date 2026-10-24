@@ -7,6 +7,11 @@ self.addEventListener('push', e => {
   e.waitUntil(self.registration.showNotification(d.title || 'Envanter', { body: d.body || '', icon: 'icon-192.png', badge: 'icon-192.png', tag: d.tag || undefined, data: { url: d.url || './' } }));
 });
 self.addEventListener('notificationclick', e => {
-  e.notification.close(); const url = (e.notification.data && e.notification.data.url) || './';
-  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(l => { for (const c of l) if ('focus' in c) return c.focus(); return self.clients.openWindow(url); }));
+  e.notification.close();
+  const hedef = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  e.waitUntil((async () => {
+    const l = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of l) { try { await c.focus(); return; } catch (_) {} }
+    await self.clients.openWindow(hedef);
+  })());
 });
