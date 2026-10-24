@@ -433,21 +433,19 @@ function sonucEkrani() {
   if (!sy) { $('#app').innerHTML = ust(`${sb.ad} · Sonuç`) + `<div class="empty"><b>Sayım yok</b>Önce Sayım sekmesinden bir sayım başlatın.</div>`; bagla(); return; }
   const tp = urunToplamlari(sy, sb); const sira = sonucListesi(sb).filter(u => tp[u]);
   const disarida = [];
-  const tik = sy.t || {}; const tikli = [...sira, ...disarida].filter(u => tik[u]).length; const top = sira.length + disarida.length;
-  const satir = (u, no) => { const x = tp[u]; const ur = S.urunler[u]; const ok = !!tik[u];
-    return `<tr class="${ok ? 'ok' : ''}" data-u="${u}"><td class="c"><span class="box ${ok ? 'on' : ''}">${ok ? '✓' : ''}</span></td><td class="no">${no}</td><td>${esc(ur.ad)}${x && x.say < x.n && x.say > 0 ? '<span class="uns">eksik konum var</span>' : ''}${!x || !x.say ? `<span class="uns">sayılmadı</span>` : ''}${sktEtiket(u, sy)}</td><td class="v">${fmt(x ? x.t : 0, ur.birim)}<small>${ur.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`; };
+
+  const satir = (u, no) => { const x = tp[u]; const ur = S.urunler[u]; 
+    return `<tr data-u="${u}"><td class="no">${no}</td><td>${esc(ur.ad)}${x && x.say < x.n && x.say > 0 ? '<span class="uns">eksik konum var</span>' : ''}${!x || !x.say ? `<span class="uns">sayılmadı</span>` : ''}${sktEtiket(u, sy)}</td><td class="v">${fmt(x ? x.t : 0, ur.birim)}<small>${ur.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`; };
   const ilr = ilerleme(sy, sb);
   $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
     <div class="chips">${secim}</div>
-    <div class="card"><div style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)"><span class="note" style="margin:0">Sisteme girdikçe dokunup işaretleyin</span><span class="tag ${tikli === top ? 'g' : 'b'}">${tikli} / ${top}</span></div>
+    <div class="card">
     <table class="st">${sira.map((u, i) => satir(u, i + 1)).join('')}
     ${disarida.length ? `<tr class="dv"><td colspan="4">Sonuç listesinde olmayanlar</td></tr>` + disarida.map(u => satir(u, '·')).join('') : ''}</table></div>
     <div class="btns"><button class="btn alt" id="paylas">Resim olarak paylaş</button></div>
-    <div class="btns"><button class="btn alt" id="tikSil">İşaretleri temizle</button>${admin() ? '<button class="btn red" id="sySil">Sayımı sil</button>' : ''}</div></div>`;
+    <div class="btns">${admin() ? '<button class="btn red" id="sySil">Sayımı sil</button>' : ''}</div></div>`;
   bagla();
   $('#app').querySelectorAll('[data-s]').forEach(b => b.onclick = () => { S.sonucId = b.dataset.s; render(); });
-  $('#app').querySelectorAll('tr[data-u]').forEach(r => r.onclick = () => { const u = r.dataset.u; sy.t ||= {}; const on = !sy.t[u]; if (on) sy.t[u] = true; else delete sy.t[u]; updateDoc(doc(db, 'sayimlar', sy.id), { ['t.' + u]: on ? true : deleteField() }).catch(hata); render(); });
-  $('#tikSil').onclick = async () => { if (!(await onayla('Bütün işaretler kaldırılacak.', 'Temizle'))) return; sy.t = {}; updateDoc(doc(db, 'sayimlar', sy.id), { t: {} }).catch(hata); render(); };
   $('#paylas').onclick = () => sonucResmi(sy, sb, sira, disarida, tp);
   const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; };
 }
