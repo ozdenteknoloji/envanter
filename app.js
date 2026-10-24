@@ -559,9 +559,9 @@ function sktEtiket(u, sy) {
   const d = sktDurum(u, sy); if (!d || d.sayimYok) return '';
   if (d.atik > 0) return `<span class="tag r" style="display:inline-block;margin-top:3px">${fmt(d.atik, S.urunler[u].birim)} atık</span>`;
   const yarin = gunEkle(bugun(), 1); const yak = d.gecerli.filter(p => p.a > 0 && p.son <= yarin).reduce((a, p) => a + p.a, 0);
-  if (yak > 0) return `<span class="tag a" style="display:inline-block;margin-top:3px">${fmt(yak, S.urunler[u].birim)} ${d.gecerli.find(p => p.a > 0 && p.son <= yarin).son === bugun() ? 'bugün' : 'yarın'} SKT</span>`;
-  if (d.eksik) return `<span class="tag" style="display:inline-block;margin-top:3px" title="Atık hesabı için irsaliye geçmişi henüz yeterli değil">yakın SKT yok</span>`;
-  return `<span class="tag g" style="display:inline-block;margin-top:3px">SKT yok</span>`;
+  const yarinEt = yak > 0 ? `<span class="tag a" style="display:inline-block;margin-top:3px">${fmt(yak, S.urunler[u].birim)} ${d.gecerli.find(p => p.a > 0 && p.son <= yarin).son === bugun() ? 'bugün' : 'yarın'} SKT</span>` : '';
+  if (d.eksik) return yarinEt || `<span class="tag" style="display:inline-block;margin-top:3px" title="Atık hesabı için irsaliye geçmişi henüz yeterli değil">yakın SKT yok</span>`;
+  return `<span class="tag g" style="display:inline-block;margin-top:3px">SKT yok</span>${yarinEt ? ' ' + yarinEt : ''}`;
 }
 function sktEkrani() {
   const sb = sube(); const R = refTarih(); const bg = bugun(); const yarin = gunEkle(bg, 1);
