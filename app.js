@@ -953,7 +953,7 @@ function sonucSiraAyar(sid) {
   $('#app').innerHTML = ust('Sonuç sırası', { geri: true, subeSecici: false, alt: `${s.ad} · ${l.length} ürün` }) + `<div class="pad">
     <p class="note" style="margin:0 0 8px">Domino's sistemine giriş sırası. Sürükleyerek dizin. Liste sayım listesinden otomatik oluşur: konumlara eklenen ürün sona gelir, konumlardan çıkan ürün buradan da çıkar.</p>
     ${eksik.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${eksik.length} ürün sayılıyor ama bu listede yok</b><p class="note">${eksik.map(urunAd).map(esc).join(', ')}</p><div class="btns"><button class="btn sm alt" id="eksikEkle">Sona ekle</button></div></div>` : ''}
-    <div class="card sl" id="ul">${l.map((u, i) => `<div class="si"><span class="drag">≡</span><span class="num" style="color:var(--mut);width:24px;font-size:12px">${i + 1}</span><div class="nm">${esc(urunAd(u))}</div></div>`).join('') || '<div class="empty" style="padding:20px">Konumlarda ürün yok.</div>'}</div></div>`;
+    <div class="card sl" id="ul">${l.map((u, i) => `<div class="si"><span class="drag">≡</span><div class="nm">${esc(urunAd(u))}</div></div>`).join('') || '<div class="empty" style="padding:20px">Konumlarda ürün yok.</div>'}</div></div>`;
   bagla();
   suruklenebilir($('#ul'), (a, b) => { const n = [...l]; n.splice(b, 0, n.splice(a, 1)[0]); kaydet(n); render(); });
 }
@@ -1098,6 +1098,13 @@ function kullaniciPanel(uid) {
 /* ================= Sürükle-bırak liste ================= */
 function suruklenebilir(liste, birak) {
   if (!liste) return;
+  const sat = [...liste.querySelectorAll('.si')].filter(x => x.querySelector('.drag')); const topN = sat.length;
+  sat.forEach((it, i) => { const b = document.createElement('button'); b.className = 'sn'; b.type = 'button'; b.textContent = i + 1; b.title = 'Sıra numarası yazarak taşı';
+    b.onclick = () => openSheet(`<h2>${esc(it.querySelector('.nm')?.firstChild?.textContent || '')}</h2><p class="note">Şu an ${i + 1}. sırada. Kaçıncı sıraya taşınsın? (1–${topN})</p><label class="field"><span>Yeni sıra</span><input id="snI" inputmode="numeric" pattern="[0-9]*" placeholder="${i + 1}"></label><div class="btns"><button class="btn" id="snK">Taşı</button></div>`, el => {
+      const inp = el.querySelector('#snI'); inp.focus();
+      const git = () => { const n = parseInt(inp.value, 10); if (!n) return; const h = Math.max(1, Math.min(topN, n)) - 1; closeSheet(); if (h !== i) birak(i, h); };
+      el.querySelector('#snK').onclick = git; inp.onkeydown = e => { if (e.key === 'Enter') git(); }; });
+    it.querySelector('.drag').after(b); });
   liste.querySelectorAll('.drag').forEach(h => h.addEventListener('pointerdown', e => {
     e.preventDefault(); const item = h.closest('.si'); const items = [...liste.querySelectorAll('.si')].filter(x => x.querySelector('.drag'));
     const idx = items.indexOf(item); if (idx < 0) return; const y0 = e.clientY, sc0 = window.scrollY; const hh = item.getBoundingClientRect().height; let cur = idx;
