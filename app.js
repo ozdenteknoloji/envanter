@@ -21,6 +21,8 @@ const eposta = k => `${kadiNorm(k)}@${GIRIS_ALANI}`;
 const slug = s => ascii(s).replace(/[^a-z0-9]+/g, '').slice(0, 24) || 'x';
 const yeniId = p => p + Math.random().toString(36).slice(2, 8);
 const bugun = () => new Date().toLocaleDateString('sv-SE');
+// İş günü: dükkanlar gece kapandığı için 00:00–06:00 arası yapılan sayım bir önceki günün sayımıdır.
+const isGunu = () => { const d = new Date(); if (d.getHours() < 6) d.setDate(d.getDate() - 1); return d.toLocaleDateString('sv-SE'); };
 const GUNU = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 const AYK = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 const haftaGunu = s => (new Date(s + 'T12:00').getDay() + 6) % 7; // 0 = Pazartesi
@@ -160,12 +162,12 @@ function render() {
   if (S.tab === 'ayarlar') return ayarlar();
   if (!S.urunYuklendi) { app.innerHTML = ust('Envanter') + `<div class="empty"><b>Yükleniyor…</b></div>`; return; }
   if (!S.subeId) { app.innerHTML = ust('Envanter') + `<div class="empty"><b>Şube yok</b>${admin() ? 'Ayarlar → Şubeler bölümünden şube ekleyin.' : 'Hesabınıza şube atanmamış. Yöneticiye haber verin.'}</div>`; bagla(); return; }
-  if (S.tab === 'sonuc') return sonucEkrani();
+  if (S.tab === 'sonuc') { S.tab = 'sayim'; S.ar = 'sonuc'; return sonucEkrani(); }
   if (S.tab === 'skt') return S.ar === 'irs' ? irsaliyeDuzen() : sktEkrani();
   return sayimListesi();
 }
 function sekmeler() {
-  const t = [['sayim', '▦', 'Sayım'], ['sonuc', '☰', 'Sonuç'], ['skt', '⏱', 'SKT'], ['ayarlar', '⚙', S.tabHazir ? 'Tekrar dokun' : 'Ayarlar']];
+  const t = [['sayim', '▦', 'Sayım'], ['skt', '⏱', 'SKT'], ['ayarlar', '⚙', S.tabHazir ? 'Tekrar dokun' : 'Ayarlar']];
   $('#tabs').hidden = false;
   $('#tabsIn').innerHTML = t.map(([k, i, a]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><i>${i}</i>${a}</button>`).join('');
   $('#tabsIn').querySelectorAll('button').forEach(b => b.onclick = () => {
@@ -258,30 +260,44 @@ function ilerleme(sy, sb) { let n = 0, say = 0; for (const k of kapsam(sb, sy.tu
 
 /* ================= Sayım listesi ================= */
 function sayimListesi() {
-  const sb = sube(); const bg = bugun(); const hg = sb.haftalikGun ?? 6; const haftalikGunu = haftaGunu(bg) === hg;
+  if (S.ar === 'gecmis') return sayimGecmisi();
+  if (S.ar === 'sonuc') return sonucEkrani();
+  const sb = sube(); const bg = isGunu(); const hg = sb.haftalikGun ?? 6; const haftalikGunu = haftaGunu(bg) === hg;
   const bugunku = t => S.sayimlar.find(s => s.id === `${S.subeId}_${bg}_${t}`);
-  const gunlukBos = !kapsam(sb, 'gunluk').length; const konumBos = !(sb.konumlar || []).some(k => (k.satirlar || []).length);
-  const kart = t => { const sy = bugunku(t); const ilk = t === 'haftalik' ? haftalikGunu : !haftalikGunu; const dis = konumBos || (t === 'gunluk' && gunlukBos);
-    const ilr = sy ? ilerleme(sy, sb) : null;
-    return `<button class="btn ${ilk && !(sy && sy.durum === 'bitti') ? '' : 'alt'}" data-bas="${t}" ${dis ? 'disabled' : ''} style="margin-bottom:8px">${sy ? (sy.durum === 'bitti' ? `${TUR[t]} sayım bitti ✓ · görüntüle` : `${TUR[t]} sayıma devam et · ${ilr.say}/${ilr.n}`) : `${TUR[t]} sayım başlat`}</button>`; };
-  const liste = S.sayimlar.map(sy => { const i = ilerleme(sy, sb); return `<button class="row" data-sy="${sy.id}"><div class="m"><b>${TUR[sy.tur] || sy.tur} · ${trTarih(sy.tarih)} ${sy.durum === 'bitti' ? '<span class="tag g">Bitti</span>' : '<span class="tag a">Devam ediyor</span>'}</b><span>${i.say}/${i.n} satır · ${esc(sy.kim || sy.baslatan || '')} ${saat(sy.son || sy.basla)}</span><div class="bar"><i style="width:${i.n ? Math.round(i.say / i.n * 100) : 0}%"></i></div></div><span class="ch">›</span></button>`; }).join('');
+  const konumBos = !(sb.konumlar || []).some(k => (k.satirlar || []).length);
+  const ana = haftalikGunu ? 'haftalik' : 'gunluk'; const diger = ana === 'haftalik' ? 'gunluk' : 'haftalik';
+  const bos = t => !kapsam(sb, t).length;
+  const dugme = (t, buyuk) => { const sy = bugunku(t); const ilr = sy ? ilerleme(sy, sb) : null; const dis = konumBos || bos(t);
+    const yazi = !sy ? (buyuk ? 'Sayıma başla' : `${TUR[t]} sayım başlat`) : sy.durum === 'bitti' ? `${TUR[t]} sayım bitti ✓ · görüntüle` : `${TUR[t]} sayıma devam et · ${ilr.say}/${ilr.n}`;
+    return buyuk ? `<button class="btn ${sy && sy.durum === 'bitti' ? 'alt' : ''}" data-bas="${t}" ${dis ? 'disabled' : ''} style="padding:22px;font-size:19px;margin-top:8px">${yazi}</button><p class="note" style="text-align:center">${TUR[t]} sayım${t === 'haftalik' ? ' · bugün haftalık sayım günü, bütün ürünler sayılır' : ''}</p>`
+      : `<a href="#" data-bas="${t}" style="color:var(--blue);font-weight:700">${yazi}</a>`; };
+  const digerSy = bugunku(diger);
   $('#app').innerHTML = ust(`${sb.ad} · Sayım`, { alt: trTarih(bg) }) + `<div class="pad">
-    ${haftalikGunu ? `<div class="card p" style="background:var(--blue-soft);border-color:transparent"><b style="color:var(--blue)">Bugün haftalık sayım günü.</b><p class="note">Haftalık sayımda bütün ürünler sayılır.</p></div>` : ''}
-    ${haftalikGunu || bugunku('haftalik') ? kart('haftalik') + kart('gunluk') : kart('gunluk')}
-    ${konumBos ? `<p class="note">Bu şubenin konumlarına henüz ürün eklenmemiş.${admin() ? ' Ayarlar → Şubeler bölümünden ekleyin.' : ''}</p>` : gunlukBos ? `<p class="note">Günlük sayılacak ürün seçilmemiş.${admin() ? ' Ayarlar → Ürünler listesinde ürünlerin yanındaki "Günlük" işaretini açın.' : ''}</p>` : ''}
-    ${!haftalikGunu && !bugunku('haftalik') && !konumBos ? `<p class="note" style="text-align:center;margin-top:4px">Haftalık sayım günü: ${GUNU[hg]} · <a href="#" id="hBugun" style="color:var(--blue);font-weight:700">bugün haftalık sayım başlat</a></p>` : ''}
-    <div class="sec">Son 7 gün</div><div class="card">${liste || '<div class="empty" style="padding:20px">Henüz sayım yok.</div>'}</div></div>`;
+    ${dugme(ana, true)}
+    ${konumBos ? `<p class="note">Bu şubenin konumlarına henüz ürün eklenmemiş.${admin() ? ' Ayarlar → Şubeler bölümünden ekleyin.' : ''}</p>` : bos(ana) ? `<p class="note">${TUR[ana]} sayılacak ürün seçilmemiş.${admin() ? ' Ayarlar → Ürünler listesinde "Günlük" / "Haftalık" işaretlerini açın.' : ''}</p>` : ''}
+    ${bg !== bugun() ? `<p class="note" style="text-align:center">Saat 06:00'dan önce yapılan sayım ${trTarih(bg)} sayımı olarak kaydedilir.</p>` : ''}
+    <div class="card" style="margin-top:20px">
+      ${!konumBos ? `<div class="row" style="cursor:default"><div class="m"><b>${digerSy ? '' : diger === 'haftalik' ? `Haftalık sayım günü: ${GUNU[hg]}` : 'Bugün sadece günlük ürünler mi sayılacak?'}</b><span>${dugme(diger, false)}</span></div></div>` : ''}
+      <button class="row" id="gecmisBtn"><div class="m"><b>Sayım geçmişi</b><span>Son 7 günün sayımları ve sonuçları</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
-  $('#app').querySelectorAll('[data-bas]').forEach(b => b.onclick = () => sayimBaslat(b.dataset.bas));
-  const hb = $('#hBugun'); if (hb) hb.onclick = async e => { e.preventDefault(); if (await onayla(`Bugün ${GUNU[haftaGunu(bg)]}; haftalık sayım günü ${GUNU[hg]}. Yine de bugün bütün ürünlerin sayıldığı haftalık sayım başlatılsın mı?`, 'Başlat')) sayimBaslat('haftalik'); };
+  $('#app').querySelectorAll('[data-bas]').forEach(b => b.onclick = async e => { e.preventDefault(); const t = b.dataset.bas;
+    if (t === 'haftalik' && !haftalikGunu && !bugunku('haftalik') && !(await onayla(`Bugün ${GUNU[haftaGunu(bg)]}; haftalık sayım günü ${GUNU[hg]}. Yine de bütün ürünlerin sayıldığı haftalık sayım başlatılsın mı?`, 'Başlat'))) return;
+    sayimBaslat(t); });
+  $('#gecmisBtn').onclick = () => go({ ar: 'gecmis' });
+}
+function sayimGecmisi() {
+  const sb = sube();
+  const liste = S.sayimlar.map(sy => { const i = ilerleme(sy, sb); return `<button class="row" data-sy="${sy.id}"><div class="m"><b>${TUR[sy.tur] || sy.tur} · ${trTarih(sy.tarih)}</b><span>${i.say}/${i.n} satır · ${esc(sy.kim || sy.baslatan || '')} ${saat(sy.son || sy.basla)}</span><div class="bar"><i style="width:${i.n ? Math.round(i.say / i.n * 100) : 0}%"></i></div></div><span class="tag ${sy.durum === 'bitti' ? 'g' : 'a'}" style="display:inline-block">${sy.durum === 'bitti' ? 'Bitti' : 'Devam ediyor'}</span><span class="ch">›</span></button>`; }).join('');
+  $('#app').innerHTML = ust(`${sb.ad} · Sayım geçmişi`, { geri: true, alt: 'Son 7 gün · daha eskiler otomatik silinir' }) + `<div class="pad"><div class="card">${liste || '<div class="empty" style="padding:20px">Henüz sayım yok.</div>'}</div></div>`;
+  bagla();
   $('#app').querySelectorAll('[data-sy]').forEach(b => b.onclick = () => go({ syId: b.dataset.sy }));
 }
 async function sayimBaslat(tur) {
-  const id = `${S.subeId}_${bugun()}_${tur}`;
+  const id = `${S.subeId}_${isGunu()}_${tur}`;
   if (syBul(id)) return go({ syId: id });
   const p = {}; for (const u of Object.keys(S.urunler)) p[u] = { c: koliIci(S.subeId, u) };
   const d = {}; for (const k of sube().konumlar || []) for (const s of k.satirlar || []) if (s.y === 'tarti') (d[k.id] ||= {})[s.u] = satirDara(s);
-  const data = { sube: S.subeId, tarih: bugun(), tur, basla: new Date().toISOString(), baslatan: benAd(), kim: benAd(), v: {}, t: {}, p, d };
+  const data = { sube: S.subeId, tarih: isGunu(), tur, basla: new Date().toISOString(), baslatan: benAd(), kim: benAd(), v: {}, t: {}, p, d };
   S.sayimlar.unshift({ id, ...data });
   setDoc(doc(db, 'sayimlar', id), data).catch(hata);
   go({ syId: id });
@@ -331,7 +347,7 @@ function editor() {
   const el = $('#edlist'); el.scrollTop = eskiScroll;
   const bb = $('#bitirBtn'); if (bb) bb.onclick = () => sayimBitir(sy);
   const ac = $('#acBtn'); if (ac) ac.onclick = () => { sy.durum = 'acik'; updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'acik' }).catch(hata); editor(); };
-  bagla(); $('#sonucBtn').onclick = () => { commitBuf(); S.sonucId = sy.id; S.syId = null; gecmis.length = 0; setTab('sonuc'); };
+  bagla(); $('#sonucBtn').onclick = () => go({ syId: null, tab: 'sayim', ar: 'sonuc', sonucId: sy.id });
   $('#app').querySelectorAll('.kt').forEach(b => b.onclick = () => { commitBuf(); S.ek = b.dataset.k; S.f = null; S.buf = null; editor(); $('#edlist').scrollTop = 0; gorunur(); });
   if (sy.durum === 'bitti') return; // kilitli: hücre ve klavye çalışmaz
   $('#app').querySelectorAll('.cell').forEach(c => c.onclick = e => { e.stopPropagation(); commitBuf(); S.f = { k: S.ek, i: +c.dataset.i, a: c.dataset.a }; S.buf = null; editor(); });
@@ -377,7 +393,7 @@ function sayimBitir(sy) {
     <p class="note">Bitirilen sayım kilitlenir; gerekirse "Sayımı tekrar aç" ile açılır.</p>
     <div class="btns"><button class="btn alt" id="bV">Vazgeç</button><button class="btn" id="bB">Bitir</button></div>`, el => {
     el.querySelector('#bV').onclick = closeSheet;
-    el.querySelector('#bB').onclick = () => { closeSheet(); Object.assign(sy, { durum: 'bitti', bitis: new Date().toISOString(), bitiren: benAd() }); updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'bitti', bitis: sy.bitis, bitiren: sy.bitiren }).catch(hata); S.sonucId = sy.id; S.syId = null; gecmis.length = 0; setTab('sonuc'); toast('Sayım bitirildi.'); };
+    el.querySelector('#bB').onclick = () => { closeSheet(); Object.assign(sy, { durum: 'bitti', bitis: new Date().toISOString(), bitiren: benAd() }); updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'bitti', bitis: sy.bitis, bitiren: sy.bitiren }).catch(hata); go({ syId: null, tab: 'sayim', ar: 'sonuc', sonucId: sy.id }); toast('Sayım bitirildi.'); };
   });
 }
 function gorunur() { const el = $('#edlist'); const r = el && el.querySelector('tr.cur'); if (!r) return; const top = r.offsetTop, h = r.offsetHeight; if (top - 30 < el.scrollTop || top + h > el.scrollTop + el.clientHeight - 10) el.scrollTop = Math.max(0, top - el.clientHeight / 3); }
@@ -427,27 +443,24 @@ document.addEventListener('keydown', e => {
 /* ================= Sonuç ================= */
 function sonucEkrani() {
   const sb = sube();
-  const liste = S.sayimlar; if (!S.sonucId || !syBul(S.sonucId)) S.sonucId = liste[0]?.id || null;
+  const liste = S.sayimlar; if (!S.sonucId || !syBul(S.sonucId)) S.sonucId = liste[0]?.id || null; const secim = '';
   const sy = syBul(S.sonucId);
-  const secim = liste.map(x => `<button class="chip ${x.id === S.sonucId ? 'on' : ''}" data-s="${x.id}">${TUR[x.tur]} · ${trTarih(x.tarih).split(' ').slice(0, 2).join(' ')}</button>`).join('');
-  if (!sy) { $('#app').innerHTML = ust(`${sb.ad} · Sonuç`) + `<div class="empty"><b>Sayım yok</b>Önce Sayım sekmesinden bir sayım başlatın.</div>`; bagla(); return; }
+  if (!sy) { $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true }) + `<div class="empty"><b>Sayım yok</b>Önce Sayım sekmesinden bir sayım başlatın.</div>`; bagla(); return; }
   const tp = urunToplamlari(sy, sb); const sira = sonucListesi(sb).filter(u => tp[u]);
   const disarida = [];
 
   const satir = (u, no) => { const x = tp[u]; const ur = S.urunler[u]; 
     return `<tr data-u="${u}"><td class="no">${no}</td><td>${esc(ur.ad)}${x && x.say < x.n && x.say > 0 ? '<span class="uns">eksik konum var</span>' : ''}${!x || !x.say ? `<span class="uns">sayılmadı</span>` : ''}${sktEtiket(u, sy)}</td><td class="v">${fmt(x ? x.t : 0, ur.birim)}<small>${ur.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`; };
   const ilr = ilerleme(sy, sb);
-  $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
-    <div class="chips">${secim}</div>
+  $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
     <div class="card">
     <table class="st">${sira.map((u, i) => satir(u, i + 1)).join('')}
     ${disarida.length ? `<tr class="dv"><td colspan="4">Sonuç listesinde olmayanlar</td></tr>` + disarida.map(u => satir(u, '·')).join('') : ''}</table></div>
     <div class="btns"><button class="btn alt" id="paylas">Resim olarak paylaş</button></div>
     <div class="btns">${admin() ? '<button class="btn red" id="sySil">Sayımı sil</button>' : ''}</div></div>`;
   bagla();
-  $('#app').querySelectorAll('[data-s]').forEach(b => b.onclick = () => { S.sonucId = b.dataset.s; render(); });
   $('#paylas').onclick = () => sonucResmi(sy, sb, sira, disarida, tp);
-  const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; };
+  const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; S.ar = null; gecmis.length = 0; S.sayimlar = S.sayimlar.filter(x => x.id !== sy.id); render(); };
 }
 async function sonucResmi(sy, sb, sira, disarida, tp) {
   const rows = [...sira, ...disarida]; const W = 900, RH = 40, H = 150 + rows.length * RH + 40; const sc = 2;
