@@ -34,7 +34,7 @@ async function subeMesaj(id) {
     if (d.atik > 0) atik.push(`${ad} ${fmt(d.atik)}${bi ? ' ' + bi : ''}`);
     for (const p of d.gecerli) if (p.a > 0) { if (p.son === R) bugunSkt.push(`${ad} ${fmt(p.a)}`); else if (p.son === Y) yarinSkt.push(`${ad} ${fmt(p.a)}`); }
   }
-  if (!bugunSkt.length && !yarinSkt.length && !atik.length) return null;
+  if (!bugunSkt.length && !yarinSkt.length && !atik.length) return { title: `${sb.ad || id}: SKT özeti`, body: 'Bugün SKT yok ✓', tag: 'skt', temiz: true };
   const par = [];
   if (atik.length) par.push('Atık: ' + atik.join(', '));
   if (bugunSkt.length) par.push('Bugün SKT: ' + bugunSkt.join(', '));
@@ -51,6 +51,11 @@ for (const c of cihazlar) {
   for (const id of ids) { if (!(id in cache)) cache[id] = await subeMesaj(id).catch(e => (console.error(id, e.message), null)); if (cache[id]) msg.push(cache[id]); }
   if (c.test) msg.push({ title: 'Envanter', body: 'Deneme bildirimi: bildirimler çalışıyor ✓', tag: 'test' });
   if (!msg.length) continue;
+  if (mod === 'sabah' && msg.length > 1) { // birden çok şube: SKT'si olmayanlar tek satırda
+    const dolu = msg.filter(m => !m.temiz), temiz = msg.filter(m => m.temiz);
+    if (!dolu.length) { msg.length = 0; msg.push({ title: 'SKT özeti', body: 'Bugün hiçbir şubede SKT yok ✓' }); }
+    else if (temiz.length) { msg.length = 0; msg.push(...dolu, { title: 'Diğerleri', body: 'SKT yok ✓' }); }
+  }
   const title = msg.length === 1 ? msg[0].title : `Envanter: ${msg.length} şube`;
   const body = msg.length === 1 ? msg[0].body : msg.map(m => m.title.split(':')[0] + ' – ' + m.body).join('\n');
   console.log(`-> ${c.ad}: ${title} | ${body}`);
