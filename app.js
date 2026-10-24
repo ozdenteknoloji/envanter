@@ -780,15 +780,15 @@ function siparisEkrani() {
   if (!(sb.takvim || []).length) { $('#app').innerHTML = ust(`${sb.ad} · Sipariş`) + `<div class="empty"><b>Sevkiyat takvimi girilmemiş</b>${admin() ? 'Ayarlar → Şube → Sevkiyat takvimi bölümünden sipariş günlerini girin.' : 'Yöneticiye haber verin.'}</div>`; return bagla(); }
   if (!S.spTarih || !gunler.find(g => g.tarih === S.spTarih)) S.spTarih = gunler[0].tarih;
   const g = gunler.find(x => x.tarih === S.spTarih); const D = g.sure; const ar = idealAralik(g.tarih, D);
-  const id = `${S.subeId}_${g.tarih}`; const kayit = S.siparisler.find(x => x.id === id) || {}; S.spTaslak = S.spTaslak && S.spTaslak.id === id ? S.spTaslak : { id, ideal: { ...(kayit.ideal || {}) }, liste: { ...(kayit.liste || {}) }, buff: kayit.buff ?? 0.5, not: kayit.not || '' };
+  const id = `${S.subeId}_${g.tarih}`; const kayit = S.siparisler.find(x => x.id === id) || {}; S.spTaslak = S.spTaslak && S.spTaslak.id === id && S.spTaslak.elde ? S.spTaslak : { id, ideal: { ...(kayit.ideal || {}) }, liste: { ...(kayit.liste || {}) }, elde: { ...(kayit.elde || {}) }, buff: kayit.buff ?? 0.5, not: kayit.not || '' };
   const T = S.spTaslak; const buff = T.buff;
   const urs = siparisListesi(sb);
-  const satir = u => { const x = S.urunler[u]; const ideal = T.ideal[u]; const el = eldeBul(u); const k = x.sKoli || 1;
+  const satir = u => { const x = S.urunler[u]; const ideal = T.ideal[u]; const sonEl = eldeBul(u); const elElle = !sayimdaMi(sb, u, 'gunluk'); const ov = elElle ? T.elde[u] : null; const el = ov != null ? { t: ov } : sonEl; const k = x.sKoli || 1;
     const hedef = ideal != null ? r6(ideal / D * (D + buff)) : null; const koli = hedef != null && el ? r6((hedef - el.t) / k) : null; const oneri = koli != null ? Math.max(0, Math.ceil(koli)) : '';
     const n = v => v == null ? '–' : fmt(v, x.birim === 'adet' ? 'adet' : 'kg');
     return `<tr><td style="text-align:left;font-weight:600;font-size:12.5px">${esc(x.ad)}<div class="note" style="margin:0;font-size:10.5px">koli ${yaz(k)}</div></td>
       <td><input class="spI" data-u="${u}" inputmode="decimal" enterkeyhint="next" value="${yaz(ideal)}" style="width:62px"></td>
-      <td>${n(hedef)}</td><td>${el ? n(el.t) : '<span style="color:var(--amber)">yok</span>'}</td>
+      <td>${n(hedef)}</td><td>${elElle ? `<input class="spE" data-u="${u}" inputmode="decimal" enterkeyhint="next" value="${yaz(ov)}" placeholder="${sonEl ? yaz(sonEl.t) : 'yaz'}" title="Elle yazın; boşsa son sayım kullanılır" style="width:58px;border-color:var(--amber)">` : el ? n(el.t) : '<span style="color:var(--amber)">yok</span>'}</td>
       <td class="${koli != null && koli <= 0 ? 'neg' : 'b'}">${koli == null ? '–' : koli <= 0 ? 'yeter' : yaz(Math.round(koli * 10) / 10)}</td>
       <td><input class="spL" data-u="${u}" inputmode="numeric" enterkeyhint="next" value="${T.liste[u] ?? ''}" placeholder="${oneri}" style="width:50px;font-weight:800"></td></tr>`; };
   const son = [...S.sayimlar].sort((a, b) => sonZaman(b).localeCompare(sonZaman(a)))[0];
@@ -799,19 +799,19 @@ function siparisEkrani() {
     ${eskiSayim ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${son ? `Son sayım ${trTarih(son.tarih)}.` : 'Sayım yok.'}</b><p class="note">Siparişten önce bugünün günlük sayımını yapın; "Elde" sütunu son sayımdan gelir.</p></div>` : ''}
     <div class="sec" style="padding-top:4px">Buff (gün)</div><div class="chips" style="flex-wrap:wrap">${BUFFLAR.map(b => `<button class="chip ${b === buff ? 'on' : ''}" data-b="${b}">${yaz(b)}</button>`).join('')}</div>
     <div class="card" style="overflow-x:auto"><table class="st spT"><tr style="font-size:10px;color:var(--mut);text-transform:uppercase;font-weight:800"><td style="text-align:left">Ürün <button id="spSira" title="Sipariş sırasını düzenle" style="border:0;background:none;font-size:14px;padding:0 4px;color:var(--blue)">✎</button></td><td>İdeal</td><td>+Buff</td><td>Elde</td><td>Koli</td><td>Liste</td></tr>${urs.map(satir).join('') || '<tr><td colspan="6"><div class="empty" style="padding:16px">Sipariş listesinde ürün yok. Ayarlar → Ürünler listesinde "Sipariş" işaretleyin.</div></td></tr>'}</table></div>
-    <p class="note">Koli = (ideal ÷ ${D} × (${D} + buff) − elde) ÷ sipariş kolisi. Liste'yi siz yazarsınız; boş bırakılan satırda soluk rakam öneridir.</p>
+    <p class="note">Koli = (ideal ÷ ${D} × (${D} + buff) − elde) ÷ sipariş kolisi. Liste'yi siz yazarsınız; boş bırakılan satırda soluk rakam öneridir. Günlük sayımda sayılmayan ürünlerde (örn. pizza kutuları) <b>Elde</b>'yi elle yazabilirsiniz; boş bırakırsanız son sayım kullanılır.</p>
     <label class="field"><span>Not (alacak / borç vb.)</span><input id="spN" value="${esc(T.not)}"></label>
     <div class="btns"><button class="btn" id="spP">Listeyi paylaş</button></div>
     <p class="note" style="text-align:center">${kayit.zaman ? `Kaydedildi · ${esc(kayit.kim || '')} ${saat(kayit.zaman)}` : 'Yazdıkça kaydedilir.'}</p></div>`;
   bagla();
-  S.spT ||= {}; const kaydet = () => { clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, not: T.not, kim: benAd(), zaman: new Date().toISOString() }).catch(hata), 600); };
+  S.spT ||= {}; const kaydet = () => { clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, elde: T.elde, not: T.not, kim: benAd(), zaman: new Date().toISOString() }).catch(hata), 600); };
   $('#app').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { S.spTarih = b.dataset.t; S.spTaslak = null; render(); });
   $('#spSira').onclick = () => go({ tab: 'ayarlar', syId: null, ar: 'siparissira:' + S.subeId });
   $('#app').querySelectorAll('[data-b]').forEach(b => b.onclick = () => { T.buff = +b.dataset.b; kaydet(); render(); });
   const girdiler = [...$('#app').querySelectorAll('.spI')];
-  $('#app').querySelectorAll('.spI,.spL').forEach(inp => {
-    inp.onchange = () => { const u = inp.dataset.u; const v = sayiOku(inp.value); const hedef = inp.classList.contains('spI') ? T.ideal : T.liste; if (v == null) delete hedef[u]; else hedef[u] = v; kaydet(); const y = window.scrollY; const odak = document.activeElement && document.activeElement.classList.contains('spI') ? document.activeElement.dataset.u : null; render(); window.scrollTo(0, y); if (odak) { const e = $(`.spI[data-u="${odak}"]`); if (e) e.focus(); } };
-    inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); const l = inp.classList.contains('spI') ? girdiler : [...$('#app').querySelectorAll('.spL')]; const i = l.indexOf(inp); inp.blur(); const nx = (inp.classList.contains('spI') ? [...$('#app').querySelectorAll('.spI')] : [...$('#app').querySelectorAll('.spL')])[i + 1]; if (nx) nx.focus(); } };
+  $('#app').querySelectorAll('.spI,.spL,.spE').forEach(inp => {
+    inp.onchange = () => { const u = inp.dataset.u; const v = sayiOku(inp.value); const hedef = inp.classList.contains('spI') ? T.ideal : inp.classList.contains('spE') ? T.elde : T.liste; if (v == null) delete hedef[u]; else hedef[u] = v; kaydet(); const y = window.scrollY; const odak = document.activeElement && document.activeElement.classList.contains('spI') ? document.activeElement.dataset.u : null; render(); window.scrollTo(0, y); if (odak) { const e = $(`.spI[data-u="${odak}"]`); if (e) e.focus(); } };
+    inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); const kl = inp.classList.contains('spI') ? '.spI' : inp.classList.contains('spE') ? '.spE' : '.spL'; const l = [...$('#app').querySelectorAll(kl)]; const i = l.indexOf(inp); inp.blur(); const nx = l[i + 1]; if (nx) nx.focus(); } };
   });
   $('#spN').onchange = e => { T.not = e.target.value; kaydet(); };
   $('#spP').onclick = async () => {
