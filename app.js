@@ -3,7 +3,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, creat
   updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   onSnapshot, collection, writeBatch, query, where, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, GIRIS_ALANI } from "./config.js?v=1";
+import { firebaseConfig, GIRIS_ALANI, VAPID_KEY } from "./config.js?v=2";
 
 /* ================= Firebase ================= */
 const fbApp = initializeApp(firebaseConfig);
@@ -234,6 +234,24 @@ function subeSecPaneli() {
     el.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { closeSheet(); subeSec(b.dataset.id); render(); });
   });
 }
+// Anlık bildirim: bu cihazın FCM kodunu alıp cihazlar/{kod} belgesine yazar; gönderimi GitHub Actions yapar.
+async function bildirimAc(msg, deneme) {
+  const yaz = t => { msg.textContent = t; };
+  try {
+    if (!VAPID_KEY) { yaz('Bildirim anahtarı (VAPID) henüz tanımlı değil.'); return; }
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) { yaz('Bu tarayıcı bildirimi desteklemiyor. iPhone için uygulamayı ana ekrana ekleyin.'); return; }
+    const izin = await Notification.requestPermission();
+    if (izin !== 'granted') { yaz('Bildirim izni verilmedi. Telefon ayarlarından izin verip tekrar deneyin.'); return; }
+    const { getMessaging, getToken, isSupported } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js");
+    if (!(await isSupported())) { yaz('Bu cihaz anlık bildirimi desteklemiyor.'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const token = await getToken(getMessaging(fbApp), { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+    if (!token) { yaz('Bildirim kodu alınamadı.'); return; }
+    await setDoc(doc(db, 'cihazlar', token), { token, uid: auth.currentUser.uid, ad: benAd(), subeler: admin() ? Object.keys(S.subeler) : (S.me.subeler || []), admin: admin(), test: deneme ? serverNow() : null, zaman: new Date().toISOString() });
+    yaz(deneme ? 'Kaydedildi. Bir sonraki bildirim turunda deneme mesajı gelir.' : '✓ Bu telefonda bildirimler açıldı.');
+  } catch (e) { yaz('Hata: ' + (e.message || e)); }
+}
+const serverNow = () => new Date().toISOString();
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -241,8 +259,14 @@ function hesapPaneli() {
     <label class="field"><span>Yeni şifre</span><input id="s1" type="password" autocomplete="new-password"></label>
     <div id="se" class="err"></div>
     <div class="btns"><button class="btn alt" id="sKay">Şifreyi değiştir</button></div>
+    <div class="sec">Bildirimler</div>
+    <p class="note">Sabah 10:30'da SKT özeti, akşam 22:00'de unutulan irsaliye hatırlatması. iPhone'da önce uygulamayı ana ekrana ekleyin.</p>
+    <div id="bdM" class="note"></div>
+    <div class="btns"><button class="btn alt" id="bdAc">🔔 Bu telefonda bildirimleri aç</button><button class="btn alt" id="bdTest">Deneme bildirimi iste</button></div>
     <div class="btns"><button class="btn red" id="cik">Çıkış yap</button></div>`, el => {
     el.querySelector('#cik').onclick = () => { closeSheet(); signOut(auth); };
+    el.querySelector('#bdAc').onclick = () => bildirimAc(el.querySelector('#bdM'));
+    el.querySelector('#bdTest').onclick = () => bildirimAc(el.querySelector('#bdM'), true);
     el.querySelector('#sKay').onclick = async () => {
       const a = el.querySelector('#s0').value, b = el.querySelector('#s1').value; const er = el.querySelector('#se');
       if (b.length < 6) { er.textContent = 'Yeni şifre en az 6 karakter olmalı.'; return; }

@@ -1,0 +1,25 @@
+name: Bildirim
+on:
+  schedule:
+    - cron: '30 7 * * *'   # 10:30 Türkiye saati — SKT özeti
+    - cron: '0 19 * * *'   # 22:00 Türkiye saati — irsaliye hatırlatması
+  workflow_dispatch:
+    inputs:
+      mod: { description: 'sabah veya aksam', default: 'sabah' }
+      kuru: { description: '1 = göndermeden dene', default: '0' }
+jobs:
+  gonder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: cd bildirim && npm install --no-audit --no-fund
+      - name: Gönder
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          KURU: ${{ github.event.inputs.kuru || '0' }}
+        run: |
+          MOD="${{ github.event.inputs.mod }}"
+          if [ -z "$MOD" ]; then if [ "$(date -u +%H)" -lt 12 ]; then MOD=sabah; else MOD=aksam; fi; fi
+          cd bildirim && node gonder.js "$MOD"

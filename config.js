@@ -11,3 +11,6 @@ export const firebaseConfig = {
 
 // Kullanıcı adları bu alan adıyla giriş e-postasına çevrilir (serik → serik@envanter-merkezi.app).
 export const GIRIS_ALANI = "envanter-merkezi.app";
+
+// Anlık bildirim (Web Push) anahtarı: Firebase → Proje ayarları → Cloud Messaging → Web Push sertifikaları → Anahtar çifti (genel anahtar).
+export const VAPID_KEY = "";

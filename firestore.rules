@@ -79,6 +79,13 @@ service cloud.firestore {
       allow delete: if subede(resource.data.sube);
     }
 
+    // Bildirim cihazları: kendi telefonunu kaydeder/siler. Gönderimi sunucu (service account) yapar.
+    match /cihazlar/{id} {
+      allow read: if girisli() && (resource.data.uid == request.auth.uid || admin());
+      allow create, update: if aktif() && request.resource.data.uid == request.auth.uid && id == request.resource.data.token;
+      allow delete: if aktif() && (resource.data.uid == request.auth.uid || admin());
+    }
+
     // Diğer her şey kapalı.
     match /{yol=**} {
       allow read, write: if false;

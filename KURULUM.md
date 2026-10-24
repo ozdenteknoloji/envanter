@@ -53,3 +53,10 @@ Sayım ekranında (sadece yönetici) konum sekmelerinin sonundaki **⚙** iki ke
 - **Sipariş** sekmesi: bir sonraki sipariş günü açılır. Domino's'tan ideali hangi aralıkla alacağınızı söyler (sipariş gününden 6 gün önce başlar, gün sayısı kadar; ör. 19'u Pazartesi → 13–17, 22'si Perşembe → 16–21).
 - İdealleri yazın, buff seçin. Koli = (ideal ÷ gün × (gün + buff) − elde) ÷ sipariş kolisi. Elde son sayımdan (ve sayımdan sonra gelen irsaliyelerden) gelir. Liste'yi siz yazarsınız; "Listeyi paylaş" ile WhatsApp'a atılır.
 - Ürünler'de **Sipariş** işareti ve **sipariş kolisi** (Domino's sevkiyat kolisi: sucuk 10 kg, mozzarella 12 kg, 7 hamur 12…) ayrıca tutulur.
+
+## Bildirimler (sabah 10:30 SKT özeti, akşam 22:00 irsaliye hatırlatması)
+1. Firebase → Proje ayarları → Cloud Messaging → Web Push sertifikaları → "Anahtar çifti oluştur" → genel anahtarı `config.js` içindeki `VAPID_KEY` alanına yapıştırın.
+2. Firebase → Proje ayarları → Hizmet hesapları → "Yeni özel anahtar oluştur" (JSON iner). GitHub → repo → Settings → Secrets and variables → Actions → `FIREBASE_SERVICE_ACCOUNT` adıyla JSON'un tamamını yapıştırın. (Dosyayı kimseye göndermeyin.)
+3. `firestore.rules` dosyasını yayınlayın (cihazlar kuralı eklendi).
+4. Her telefonda: Hesap → "Bu telefonda bildirimleri aç". iPhone'da önce Safari → Paylaş → Ana Ekrana Ekle.
+5. Deneme: GitHub → Actions → Bildirim → Run workflow (mod: sabah, kuru: 0). Hesap panelindeki "Deneme bildirimi iste" ile o telefona deneme mesajı da gider.
