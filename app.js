@@ -4,7 +4,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, creat
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   onSnapshot, collection, writeBatch, query, where, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, GIRIS_ALANI, VAPID_KEY } from "./config.js?v=3";
-import { hesapKur } from "./hesap.js?v=1";
+import { hesapKur } from "./hesap.js?v=2";
 
 /* ================= Firebase ================= */
 const fbApp = initializeApp(firebaseConfig);
@@ -196,22 +196,58 @@ function gitUygula() {
   if (g.git === 'irs') setTimeout(() => { if (S.tab === 'skt') irsaliyeEkle(); }, 150);
   if (g.git === 'skt') setTimeout(() => { if (S.tab === 'skt') ozetPaylas(); }, 150);
 }
-// SKT özetini WhatsApp'ta paylaş: şube seçilir, metin hazır gelir
+// SKT özeti resmi (koyu kart): şubeler alt alta, ürün başına renkli nokta
+function ozetResmi(parcalar) {
+  const W = 520, K = 2, RENK = { atik: ['#dc2626', 'Atık'], bugun: ['#ea580c', 'Bugün son gün'], yarin: ['#d97706', 'Yarın son gün'] };
+  const F = 'Inter, Arial, sans-serif'; const T = bugun().split('-').reverse().slice(0, 2).join('.');
+  const bloklar = parcalar.map(p => { const sat = []; for (const k of ['atik', 'bugun', 'yarin']) for (const i of p.o?.[k] || []) sat.push({ k, ...i }); return { ad: p.ad, sat, yok: !p.o }; });
+  const H = 64 + bloklar.reduce((a, b) => a + 12 + 42 + Math.max(1, b.sat.length) * 40, 0) + 14;
+  const cv = document.createElement('canvas'); cv.width = W * K; cv.height = H * K; const c = cv.getContext('2d'); c.scale(K, K);
+  c.fillStyle = '#0f172a'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#fff'; c.font = `800 24px ${F}`; c.textBaseline = 'middle'; c.textAlign = 'left'; c.fillText('SKT Özeti', 22, 36);
+  c.fillStyle = '#94a3b8'; c.font = `500 14px ${F}`; c.textAlign = 'right'; c.fillText(T, W - 22, 36);
+  let y = 64;
+  for (const b of bloklar) {
+    y += 12; c.fillStyle = '#1e293b'; c.beginPath(); c.roundRect(16, y, W - 32, 42 + Math.max(1, b.sat.length) * 40, 14); c.fill();
+    c.save(); c.clip(); c.fillStyle = '#0b3d73'; c.fillRect(16, y, W - 32, 42); c.restore();
+    c.fillStyle = '#fff'; c.font = `800 19px ${F}`; c.textAlign = 'left'; c.fillText(b.ad, 32, y + 21);
+    let ry = y + 42;
+    if (!b.sat.length) { c.fillStyle = b.yok ? '#94a3b8' : '#4ade80'; c.font = `700 17px ${F}`; c.fillText(b.yok ? 'Özet henüz hazır değil' : '✓ Bugün SKT yok', 32, ry + 20); ry += 40; }
+    for (const i of b.sat) {
+      c.fillStyle = '#334155'; c.fillRect(32, ry, W - 64, 1);
+      c.fillStyle = RENK[i.k][0]; c.beginPath(); c.arc(38, ry + 20, 6, 0, 7); c.fill();
+      c.fillStyle = '#fff'; c.font = `500 17px ${F}`; c.textAlign = 'left'; c.fillText(i.a, 54, ry + 20, 230);
+      c.font = `800 17px ${F}`; c.textAlign = 'right'; c.fillText(i.q, W - 132, ry + 20);
+      c.fillStyle = '#94a3b8'; c.font = `500 12px ${F}`; c.fillText(RENK[i.k][1], W - 30, ry + 20); ry += 40;
+    }
+    y = ry;
+  }
+  return new Promise(r => cv.toBlob(r, 'image/png'));
+}
+// SKT özetini resim olarak WhatsApp'ta paylaş: şube seçilir, resim hazırlanır, Paylaş ile telefonun paylaşım menüsü açılır
 function ozetPaylas() {
   const ids = subeIds(); const sec = new Set([S.subeId]);
-  openSheet(`<h2>SKT özetini paylaş</h2><p class="note">Şubeleri seçin; seçtiğiniz şubelerin özeti tek mesajda WhatsApp'a gider, grubu orada seçersiniz.</p>
+  openSheet(`<h2>SKT özetini paylaş</h2><p class="note">Şubeleri seçin; hepsi tek resimde olur. Sonra WhatsApp'ı seçip grubu seçersiniz.</p>
     <div class="card">${ids.map(id => `<label class="row" style="display:flex;gap:10px;align-items:center;padding:12px"><input type="checkbox" data-s="${id}" ${sec.has(id) ? 'checked' : ''}><b>${esc(S.subeler[id]?.ad || id)}</b></label>`).join('')}</div>
-    <div id="opM" class="note"></div><div class="btns"><button class="btn" id="opG">💬 WhatsApp'ta paylaş</button></div>`, el => {
-    el.querySelector('#opG').onclick = async () => {
-      const m = el.querySelector('#opM'); const secili = [...el.querySelectorAll('[data-s]:checked')].map(x => x.dataset.s);
+    <div id="opM" class="note"></div><div id="opR"></div><div class="btns"><button class="btn" id="opG">🖼 Resmi hazırla</button></div>`, el => {
+    const m = el.querySelector('#opM'), r = el.querySelector('#opR'), g = el.querySelector('#opG'); let blob = null;
+    el.querySelectorAll('[data-s]').forEach(x => x.onchange = () => { blob = null; r.innerHTML = ''; g.textContent = '🖼 Resmi hazırla'; });
+    g.onclick = async () => {
+      if (blob) { // paylaş (kullanıcı dokunuşuyla)
+        const f = new File([blob], 'skt-ozeti.png', { type: 'image/png' });
+        try { if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f] }); return; } } catch (e) { if (e.name === 'AbortError') return; }
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'skt-ozeti.png'; a.click(); m.textContent = 'Resim indirildi; WhatsApp\'tan galeriden ekleyin.'; return;
+      }
+      const secili = [...el.querySelectorAll('[data-s]:checked')].map(x => x.dataset.s);
       if (!secili.length) { m.textContent = 'En az bir şube seçin.'; return; }
       m.textContent = 'Hazırlanıyor…'; const parca = [];
       for (const id of secili) {
-        if (id === S.subeId) { const H = hesapKur(S); parca.push(H.ozetMetin(S.subeler[id].ad || id, H.sktOzet())); continue; }
-        try { const d = await getDoc(doc(db, 'ozetler', id)); const v = d.exists() ? d.data() : null; parca.push(v && v.tarih === bugun() ? v.metin : `*${S.subeler[id]?.ad || id}*: özet henüz hazır değil (sabah 10:30'dan sonra oluşur). O şubeyi seçip tekrar açın.`); } catch (e) { parca.push(`*${S.subeler[id]?.ad || id}*: özet okunamadı.`); }
+        const ad = S.subeler[id]?.ad || id;
+        if (id === S.subeId) { parca.push({ ad, o: hesapKur(S).sktOzet() }); continue; }
+        try { const d = await getDoc(doc(db, 'ozetler', id)); const v = d.exists() ? d.data() : null; parca.push({ ad, o: v && v.tarih === bugun() && v.o ? v.o : null }); } catch (e) { parca.push({ ad, o: null }); }
       }
-      const url = 'https://wa.me/?text=' + encodeURIComponent(parca.join('\n\n'));
-      window.open(url, '_blank'); m.textContent = '';
+      blob = await ozetResmi(parca); m.textContent = parca.some(p => !p.o) ? 'Bazı şubelerin özeti henüz hazır değil (sabah 10:30\'dan sonra oluşur).' : '';
+      r.innerHTML = `<img src="${URL.createObjectURL(blob)}" style="width:100%;border-radius:12px;margin:8px 0">`; g.textContent = '💬 WhatsApp\'ta paylaş';
     };
   });
 }

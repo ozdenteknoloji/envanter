@@ -25,12 +25,12 @@ async function subeMesaj(id) {
     return { title: `${sb.ad || id}: irsaliye girilmedi`, body: `${e.map(x => x.sevk.split('-').reverse().slice(0, 2).join('.')).join(', ')} sevkiyatının irsaliyesi henüz girilmemiş.`, url: `./?git=irs&sube=${id}` };
   }
   const o = H.sktOzet(); const metin = H.ozetMetin(sb.ad || id, o);
-  if (!kuru) await db.doc('ozetler/' + id).set({ tarih: H.bugun(), metin, zaman: new Date().toISOString() });
+  if (!kuru) await db.doc('ozetler/' + id).set({ tarih: H.bugun(), metin, o, zaman: new Date().toISOString() });
   if (H.ozetBos(o)) return { title: `${sb.ad || id}: SKT özeti`, body: 'Bugün SKT yok ✓', temiz: true, url: `./?git=skt&sube=${id}` };
   const par = [];
-  if (o.atik.length) par.push('Atık: ' + o.atik.join(', '));
-  if (o.bugun.length) par.push('Bugün SKT: ' + o.bugun.join(', '));
-  if (o.yarin.length) par.push('Yarın SKT: ' + o.yarin.join(', '));
+  if (o.atik.length) par.push('Atık: ' + o.atik.map(H.ogeMetin).join(', '));
+  if (o.bugun.length) par.push('Bugün SKT: ' + o.bugun.map(H.ogeMetin).join(', '));
+  if (o.yarin.length) par.push('Yarın SKT: ' + o.yarin.map(H.ogeMetin).join(', '));
   return { title: `${sb.ad || id}: SKT özeti`, body: par.join(' · '), url: `./?git=skt&sube=${id}` };
 }
 
