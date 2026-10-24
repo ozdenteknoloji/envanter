@@ -395,9 +395,17 @@ function konumMenusu() {
     <button class="row" id="mEkle"><div class="m"><b style="color:var(--blue)">+ ${esc(k.ad)}'e ürün ekle</b><span>Listeden seç, sona eklenir</span></div></button>
     ${cu ? `<button class="row" id="mCik"><div class="m"><b>${esc(urunAd(cu))} ürününü ${esc(k.ad)}'den çıkar</b><span>Şu an üzerinde durduğun ürün</span></div></button>` : ''}
     <button class="row" id="mDuz"><div class="m"><b>${esc(k.ad)} sırasını ve sayım şeklini düzenle</b><span>Sürükle-bırak, Koli / Tartı / Adet</span></div><span class="ch">›</span></button>
+    <button class="row" id="mSifT"><div class="m"><b style="color:var(--red)">Sayımı sıfırla</b><span>Bu sayımda şu ana kadar yazılan her rakam silinir</span></div></button>
     <button class="row" id="mYer"><div class="m"><b>Ürün yerleri tablosu</b><span>Bütün ürünler × bütün konumlar</span></div><span class="ch">›</span></button></div>
     <button class="btn alt" id="mKap" style="margin-top:6px">Kapat</button>`, el => {
     el.querySelector('#mKap').onclick = closeSheet;
+    const sifirla = async () => { if (!sy) return; closeSheet();
+      if (!(await onayla(`Bu sayımda şu ana kadar yazılan <b>her rakam silinecek</b>, sayım baştan başlayacak.`, 'Sıfırla'))) return;
+      sy.v = {};
+      sy.son = new Date().toISOString(); sy.kim = benAd();
+      updateDoc(doc(db, 'sayimlar', sy.id), { v: deleteField(), son: sy.son, kim: sy.kim }).catch(hata);
+      const ks = kapsam(sube(), sy.tur); const k0 = ks[0]; S.ek = k0.id; S.f = { k: k0.id, i: 0, a: 'm' }; S.buf = null; toast('Sayım sıfırlandı.'); editor(); };
+    el.querySelector('#mSifT').onclick = sifirla;
     el.querySelector('#mDuz').onclick = () => { closeSheet(); go({ tab: 'ayarlar', syId: null, ar: `konum:${sid}:${k.id}` }); };
     el.querySelector('#mYer').onclick = () => { closeSheet(); go({ tab: 'ayarlar', syId: null, ar: `yerler:${sid}`, yerAra: '', yerFiltre: 'hepsi' }); };
     el.querySelector('#mEkle').onclick = () => urunSecici((k.satirlar || []).map(x => x.u), sec => {
