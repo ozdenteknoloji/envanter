@@ -78,10 +78,10 @@ onAuthStateChanged(auth, async u => {
 function baglan() {
   if (!S.unsub.ai) S.unsub.ai = onSnapshot(doc(db, 'genel', 'ai'), s => { S.ai = (s.exists() && s.data()) || {}; }, () => { });
   if (!S.unsub.esl) S.unsub.esl = onSnapshot(doc(db, 'genel', 'eslesme'), s => { S.eslesme = (s.exists() && s.data().m) || {}; }, () => { });
-  if (!S.unsub.urun) S.unsub.urun = onSnapshot(doc(db, 'genel', 'urunler'), s => { S.urunler = (s.exists() && s.data().u) || {}; S.urunDuzen = (s.exists() && s.data().duzen) || 0; S.urunYuklendi = true; adlariDuzenle(); gunlukTasi(); siparisKur(); render(); }, hata);
+  if (!S.unsub.urun) S.unsub.urun = onSnapshot(doc(db, 'genel', 'urunler'), s => { S.urunler = (s.exists() && s.data().u) || {}; S.urunDuzen = (s.exists() && s.data().duzen) || 0; S.urunYuklendi = true; adlariDuzenle(); gunlukTasi(); siparisKur(); grupKur(); render(); }, hata);
   for (const k of Object.keys(S.unsub)) if (k.startsWith('sb:')) { S.unsub[k](); delete S.unsub[k]; }
   if (admin()) {
-    S.unsub['sb:*'] = onSnapshot(collection(db, 'subeler'), s => { S.subeler = {}; s.forEach(d => S.subeler[d.id] = d.data()); S.subelerYuklendi = true; subeSec(); gunlukTasi(); siparisKur(); render(); }, hata);
+    S.unsub['sb:*'] = onSnapshot(collection(db, 'subeler'), s => { S.subeler = {}; s.forEach(d => S.subeler[d.id] = d.data()); S.subelerYuklendi = true; subeSec(); gunlukTasi(); siparisKur(); grupKur(); render(); }, hata);
     if (!S.unsub.kul) S.unsub.kul = onSnapshot(collection(db, 'kullanicilar'), s => { S.kullanicilar = s.docs.map(d => ({ uid: d.id, ...d.data() })); render(); }, hata);
   } else {
     S.subeler = {};
@@ -122,11 +122,20 @@ let gunlukTasindi = false;
 const SIPARIS_KOLI = {"7 HAMUR": 12, "13 HAMUR": 6, "10 HAMUR": 10, "PAN HAMUR": 6, "PASTIRMA": 4, "PEPPERONİ": 10, "SUCUK": 10, "SOSİS": 10, "TAVUK PARÇALARI": 1.5, "MOZZARELLA": 12, "PİZZA SOSU": 10, "MANTAR": 2, "ÇITIR TAVUK TOPLARI": 2.25, "TON BALIĞI": 1.248, "SİYAH ZEYTİN": 8, "JAMBON": 10, "10 TABAN": 24, "13 TABAN": 16, "PATATES": 2.5, "FİNGERS": 1, "CHEDDAR PEYNİRİ": 3.8, "TANDIR ETİ": 1.8, "ÇUBUK MOZZARELLA": 0.25, "SUFLE": 36, "MANGAL SUCUK": 3, "KÜP SUCUK": 3, "KÖFTE": 0.55, "ERİTME PEYNİRİ": 1, "PİZZA KUTUSU 10": 100, "PİZZA KUTUSU 12,5": 50, "PİZZA KUTUSU 14,5": 50};
 const TAKVIM_GRUP = [{ ad: ['serik', 'belek', 'legends', 'manavgat', 'kumkoy', 'ilkbahar'], t: [{ gun: 0, sure: 5 }, { gun: 3, sure: 6 }] }, { ad: ['dosemealti', 'altinkale', 'yildiz'], t: [{ gun: 1, sure: 5 }, { gun: 4, sure: 6 }] }];
 const takvimVarsayilan = ad => { const a = ascii(ad).replace(/[^a-z]/g, ''); const g = TAKVIM_GRUP.find(g => g.ad.some(x => a.includes(x))); return g ? g.t : null; };
+const ICECEK_RE = /KOLA|FANTA|SPRITE|AYRAN|FUSE TEA|CAPPY|MONSTER|SCHWEPPES|\bSU\b|LİMONATA|GAZOZ|MEYVE SUYU/;
+const icecekMi = u => ICECEK_RE.test(ascii(S.urunler[u]?.ad || '').toUpperCase().replace(/I/g, 'İ')) || ICECEK_RE.test((S.urunler[u]?.ad || '').toUpperCase());
+function icecekAyir(k) { const sat = (k.satirlar || []).map(x => x.g == null && icecekMi(x.u) ? { ...x, g: 'i' } : x); return { ...k, gruplu: true, satirlar: [...sat.filter(x => x.g !== 'i'), ...sat.filter(x => x.g === 'i')] }; }
+const grupKuruldu = new Set();
+function grupKur() { // Walk-in'de ürünler/içecekler ayrı başlık; bir kez, gruplu alanı hiç yazılmamış konumlara
+  if (!admin() || !S.urunYuklendi || !S.subelerYuklendi || !Object.keys(S.urunler).length) return;
+  for (const [sid, sb] of Object.entries(S.subeler)) { if (grupKuruldu.has(sid)) continue; if (!(sb.konumlar || []).some(k => k.gruplu === undefined && /walk/.test(ascii(k.ad)))) continue; grupKuruldu.add(sid);
+    const yeni = sb.konumlar.map(k => k.gruplu === undefined && /walk/.test(ascii(k.ad)) ? icecekAyir(k) : k); sb.konumlar = yeni; subeKaydet(sid, { konumlar: yeni }); }
+}
 let siparisKuruldu = false;
 function siparisKur() {
   if (siparisKuruldu || !admin() || !S.urunYuklendi || !S.subelerYuklendi || !Object.keys(S.urunler).length) return; siparisKuruldu = true;
-  if ((S.urunDuzen || 0) < 5) { const p = { duzen: 5 }; if ((S.urunDuzen || 0) < 4) { for (const [id, x] of Object.entries(S.urunler)) { const k = SIPARIS_KOLI[x.ad]; if (k != null && x.siparis == null) { p[`u.${id}.siparis`] = true; if (x.sKoli == null) p[`u.${id}.sKoli`] = k; } } } for (const [id, x] of Object.entries(S.urunler)) if (x.dara != null) p[`u.${id}.dara`] = deleteField();
-    for (const [sid, sb] of Object.entries(S.subeler)) if ((sb.konumlar || []).some(k => (k.satirlar || []).some(x => x.d != null))) subeKaydet(sid, { konumlar: sb.konumlar.map(k => ({ ...k, satirlar: (k.satirlar || []).map(({ d, ...x }) => x) })) });
+  if ((S.urunDuzen || 0) < 6) { const p = { duzen: 6 }; const v0 = S.urunDuzen || 0; if (v0 < 4) { for (const [id, x] of Object.entries(S.urunler)) { const k = SIPARIS_KOLI[x.ad]; if (k != null && x.siparis == null) { p[`u.${id}.siparis`] = true; if (x.sKoli == null) p[`u.${id}.sKoli`] = k; } } } if (v0 < 5) for (const [id, x] of Object.entries(S.urunler)) if (x.dara != null) p[`u.${id}.dara`] = deleteField();
+    if (v0 < 5) for (const [sid, sb] of Object.entries(S.subeler)) if ((sb.konumlar || []).some(k => (k.satirlar || []).some(x => x.d != null))) subeKaydet(sid, { konumlar: sb.konumlar.map(k => ({ ...k, satirlar: (k.satirlar || []).map(({ d, ...x }) => x) })) });
     updateDoc(doc(db, 'genel', 'urunler'), p).catch(() => { siparisKuruldu = false; }); }
   for (const [sid, sb] of Object.entries(S.subeler)) if (!sb.takvim) { const t = takvimVarsayilan(sb.ad); if (t) { sb.takvim = t; subeKaydet(sid, { takvim: t }); } }
 }
@@ -269,7 +278,9 @@ const syBul = id => S.sayimlar.find(s => s.id === id);
 const varsGun = x => !!x.gunluk, varsHaf = x => x.haftalik !== false;
 function sayimdaMi(sb, u, tur) { const x = S.urunler[u]; if (!x) return false; const o = sb.isaret?.[u]?.[tur === 'gunluk' ? 'g' : 'h']; return o != null ? o : (tur === 'gunluk' ? varsGun(x) : varsHaf(x)); }
 function kapsam(sb, tur) { // sayımda görünen konumlar ve satırlar
-  return (sb.konumlar || []).map(k => ({ ...k, satirlar: (k.satirlar || []).filter(s => { const x = S.urunler[s.u]; return x && x.aktif !== false && (tur === 'gunluk' ? sayimdaMi(sb, s.u, 'gunluk') : true); }) })).filter(k => k.satirlar.length);
+  return (sb.konumlar || []).map(k => ({ ...k, satirlar: grupSirala(k, (k.satirlar || []).filter(s => { const x = S.urunler[s.u]; return x && x.aktif !== false && (tur === 'gunluk' ? sayimdaMi(sb, s.u, 'gunluk') : true); })) })).filter(k => k.satirlar.length);
+}
+function grupSirala(k, sat) { return k.gruplu ? [...sat.filter(x => x.g !== 'i'), ...sat.filter(x => x.g === 'i')] : sat;
 }
 const deger = (sy, k, u) => (sy.v && sy.v[k] && sy.v[k][u]) || {};
 const satirDara = s => s.d ?? S.urunler[s.u]?.dara ?? null;
@@ -354,12 +365,18 @@ function editor() {
   const tartiVar = k.satirlar.some(s => s.y === 'tarti');
   const ayarTus = true ? `<button class="kt ayar ${S.ayarHazir ? 'hazir' : ''}" id="kAyar">${S.ayarHazir ? '⚙ Tekrar dokun' : '⚙'}</button>` : '';
   const tabs = ks.map(x => { const n = x.satirlar.length, say = x.satirlar.filter(s => sayildi(deger(sy, x.id, s.u))).length; return `<button class="kt ${x.id === S.ek ? 'on' : ''} ${say === n ? 'ok' : ''}" data-k="${x.id}">${esc(x.ad)}<small>${say === n ? '✓' : say + '/' + n}</small></button>`; }).join('');
+  S.kapali ||= {}; const gk = x => `${k.id}:${x}`;
+  if (k.gruplu && k.satirlar[S.f.i]) { const gc = k.satirlar[S.f.i].g === 'i' ? 'i' : 'u'; if (S.kapali[gk(gc)] && S.f.k === k.id) delete S.kapali[gk(gc)]; } // odak kapalı gruba düşerse aç
+  const grupSay = {}; k.satirlar.forEach(x => { const g = x.g === 'i' ? 'i' : 'u'; const o = grupSay[g] ||= { n: 0, say: 0 }; o.n++; if (sayildi(deger(sy, k.id, x.u))) o.say++; });
   const rows = k.satirlar.map((s, i) => {
+    const gcur = k.gruplu ? (s.g === 'i' ? 'i' : 'u') : null; const gprev = k.gruplu && i > 0 ? (k.satirlar[i - 1].g === 'i' ? 'i' : 'u') : null;
+    const gbas = gcur && (i === 0 || gcur !== gprev) ? `<tr class="gh" data-g="${gcur}"><td colspan="3">${S.kapali[gk(gcur)] ? '▸' : '▾'} ${gcur === 'i' ? 'İÇECEKLER' : 'ÜRÜNLER'}<span>${grupSay[gcur].say === grupSay[gcur].n ? '✓ ' : ''}${grupSay[gcur].say}/${grupSay[gcur].n}</span></td></tr>` : '';
+    const gizli = gcur && S.kapali[gk(gcur)] ? ' hidden' : '';
     const u = S.urunler[s.u]; const v = deger(sy, k.id, s.u); const cur = S.f.k === k.id && S.f.i === i; const tot = satirToplam(sy, k.id, s);
     const cell = (a, val, cls = '') => { const f = cur && S.f.a === a; const txt = f && S.buf != null ? S.buf : (a === 'k' ? yaz(val ?? 1) : yaz(val)); return `<span class="cell ${cls} ${f ? 'f' + (S.buf != null ? ' ty' : '') : ''} ${!f && val == null && a !== 'k' ? 'e' : ''}" data-i="${i}" data-a="${a}">${txt || (f ? '' : '–')}</span>`; };
     const ek = v.x != null || (cur && S.f.a === 'x') ? `<span class="ekx">+ ekstra ${cell('x', v.x)} ${u.birim === 'adet' ? 'adet' : 'kg'}</span>` : '';
     const ipucu = s.y === 'koli' ? `×${yaz(prm(sy, s, k.id).c)}` : s.y === 'tarti' ? 'tartı' : '';
-    return `<tr class="${cur ? 'cur' : ''} ${sayildi(v) ? 'done' : ''}" data-i="${i}"><td class="n" data-i="${i}">${esc(u.ad)}<small>${ipucu}</small>${ek}</td>
+    return gbas + `<tr class="${cur ? 'cur' : ''} ${sayildi(v) ? 'done' : ''}" data-i="${i}"${gizli}><td class="n" data-i="${i}">${esc(u.ad)}<small>${ipucu}</small>${ek}</td>
       <td>${cell('m', v.m)}</td>
       <td class="tot ${tot == null ? 'e' : tot < 0 ? 'neg' : ''}">${tot == null ? '–' : fmt(tot, u.birim)}<small>${u.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`;
   }).join('');
@@ -383,9 +400,11 @@ function editor() {
   const bb = $('#bitirBtn'); if (bb) bb.onclick = () => sayimBitir(sy);
   const ac = $('#acBtn'); if (ac) ac.onclick = () => { sy.durum = 'acik'; updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'acik' }).catch(hata); editor(); };
   bagla(); $('#sonucBtn').onclick = () => go({ syId: null, tab: 'sayim', ar: 'sonuc', sonucId: sy.id });
+  sekmeSurukle();
   $('#app').querySelectorAll('.kt').forEach(b => b.onclick = () => { commitBuf(); S.ek = b.dataset.k; S.f = null; S.buf = null; editor(); $('#edlist').scrollTop = 0; gorunur(); });
   if (sy.durum === 'bitti') return; // kilitli: hücre ve klavye çalışmaz
   $('#app').querySelectorAll('.cell').forEach(c => c.onclick = e => { e.stopPropagation(); commitBuf(); S.f = { k: S.ek, i: +c.dataset.i, a: c.dataset.a }; S.buf = null; editor(); });
+  $('#app').querySelectorAll('tr.gh').forEach(h => h.onclick = () => { commitBuf(); const ky = `${S.ek}:${h.dataset.g}`; S.kapali[ky] = !S.kapali[ky]; const t = $('#edlist').scrollTop; editor(); $('#edlist').scrollTop = t; });
   $('#app').querySelectorAll('td.n').forEach(c => c.onclick = () => { commitBuf(); S.f = { k: S.ek, i: +c.dataset.i, a: 'm' }; S.buf = null; editor(); });
   $('#app').querySelectorAll('.k').forEach(b => { b.addEventListener('pointerdown', e => { e.preventDefault(); tus(b.dataset.key); }); });
   const ka = $('#kAyar'); if (ka) ka.onclick = () => {
@@ -916,11 +935,12 @@ function konumAyar(sid, kid) {
   const s = S.subeler[sid]; const ks = s?.konumlar || []; const k = ks.find(x => x.id === kid);
   if (!k) { $('#app').innerHTML = ust('Konum', { geri: true }) + '<div class="empty"><b>Konum yok</b></div>'; return bagla(); }
   const kaydet = sat => { const yeni = ks.map(x => x.id === kid ? { ...x, satirlar: sat } : x); s.konumlar = yeni; subeKaydet(sid, { konumlar: yeni }); };
-  const sat = k.satirlar || [];
+  const sat = grupSirala(k, k.satirlar || []); const nU = k.gruplu ? sat.filter(x => x.g !== 'i').length : sat.length;
   $('#app').innerHTML = ust(k.ad, { geri: true, subeSecici: false, alt: `${s.ad} · ${sat.length} ürün` }) + `<div class="pad">
     <p class="note" style="margin:0 0 8px">Sayımdaki sırayı raf sırasına göre sürükleyerek dizin. <b>Koli</b>: koli × koli içi · <b>Tartı</b>: brüt kg − kap darası (bu şubeye özel, dokunup düzeltin; iki kap kullanılıyorsa toplam darayı yazın) · <b>Adet</b>: tek tek sayılır.</p>
-    <div class="card sl" id="ul">${sat.map((x, i) => { const u = S.urunler[x.u]; return `<div class="si"><span class="drag">≡</span><div class="nm">${esc(u?.ad || '(silinmiş ürün)')}<small>${x.y === 'koli' ? `<a class="dl" data-koli="${x.u}">koli içi ${yaz(koliIci(sid, x.u) ?? 1)}${s.koliIci?.[x.u] != null ? ' · bu şubeye özel' : ''} ✎</a>` : x.y === 'tarti' ? (satirDara(x) != null ? `<a class="dl" data-dara="${i}">kap darası ${yaz(satirDara(x))} kg ✎</a>` : `<a class="dl" data-dara="${i}" style="color:var(--red)">kap darası girilmemiş ✎</a>`) : 'adet'}</small></div>
-      <span class="seg">${['koli', 'tarti', 'adet'].map(y => `<button data-i="${i}" data-y="${y}" class="${x.y === y ? 'on' : ''}">${YON[y]}</button>`).join('')}</span><button class="x" data-sil="${i}">✕</button></div>`; }).join('') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div>
+    <div class="card sl" id="ul">${sat.map((x, i) => { const u = S.urunler[x.u]; return (k.gruplu && i === nU ? '<div class="si sep"><span class="drag" style="display:none"></span><b>İÇECEKLER</b><small>ürünü buraya sürükle / buradan çıkar</small></div>' : '') + `<div class="si"><span class="drag">≡</span><div class="nm">${esc(u?.ad || '(silinmiş ürün)')}<small>${x.y === 'koli' ? `<a class="dl" data-koli="${x.u}">koli içi ${yaz(koliIci(sid, x.u) ?? 1)}${s.koliIci?.[x.u] != null ? ' · bu şubeye özel' : ''} ✎</a>` : x.y === 'tarti' ? (satirDara(x) != null ? `<a class="dl" data-dara="${i}">kap darası ${yaz(satirDara(x))} kg ✎</a>` : `<a class="dl" data-dara="${i}" style="color:var(--red)">kap darası girilmemiş ✎</a>`) : 'adet'}</small></div>
+      <span class="seg">${['koli', 'tarti', 'adet'].map(y => `<button data-i="${i}" data-y="${y}" class="${x.y === y ? 'on' : ''}">${YON[y]}</button>`).join('')}</span><button class="x" data-sil="${i}">✕</button></div>`; }).join('') + (k.gruplu && nU === sat.length ? '<div class="si sep"><span class="drag" style="display:none"></span><b>İÇECEKLER</b><small>ürünü buraya sürükle</small></div>' : '') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div>
+    <div class="card"><button class="row" id="kGrup"><div class="m"><b>İçecek bölümü</b><span>${k.gruplu ? 'Açık · sayımda ürünler ve içecekler ayrı başlıkta' : 'Kapalı · tek liste'}</span></div><span class="tag ${k.gruplu ? 'g' : ''}">${k.gruplu ? 'Açık' : 'Kapalı'}</span></button></div>
     <div class="btns"><button class="btn" id="uEkle">+ Ürün ekle</button></div>
     ${admin() ? `<div class="btns"><button class="btn alt" id="kAd">Adını değiştir</button><button class="btn red" id="kSil">Konumu sil</button></div>` : ''}</div>`;
   bagla();
@@ -930,7 +950,11 @@ function konumAyar(sid, kid) {
   $('#app').querySelectorAll('[data-dara]').forEach(a => a.onclick = () => { const i = +a.dataset.dara; const x = sat[i];
     openSheet(`<h2>${esc(urunAd(x.u))}</h2><p class="note">${esc(s.ad)} · ${esc(k.ad)} kabının darası. Her şubenin kabı farklı olabilir; sadece bu şubeyi etkiler.</p><label class="field"><span>Kap darası (kg)</span><input id="dd" inputmode="decimal" value="${yaz(satirDara(x))}" placeholder="örn. 0,356"></label><div class="btns"><button class="btn" id="dk">Kaydet</button></div>`, el => {
       el.querySelector('#dd').focus(); el.querySelector('#dk').onclick = () => { const v = sayiOku(el.querySelector('#dd').value); kaydet(sat.map((y, j) => j === i ? { ...y, d: v } : y)); closeSheet(); render(); }; }); });
-  suruklenebilir($('#ul'), (a, b) => { const n = [...sat]; n.splice(b, 0, n.splice(a, 1)[0]); kaydet(n); render(); });
+  suruklenebilir($('#ul'), (a, b) => {
+    if (!k.gruplu) { const n = [...sat]; n.splice(b, 0, n.splice(a, 1)[0]); kaydet(n); render(); return; }
+    const tam = [...sat.slice(0, nU), 'SEP', ...sat.slice(nU)]; tam.splice(b, 0, tam.splice(a, 1)[0]); const si = tam.indexOf('SEP');
+    const n = tam.map((x, j) => x === 'SEP' ? null : j > si ? { ...x, g: 'i' } : (({ g, ...y }) => y)(x)).filter(Boolean); kaydet(n); render(); });
+  $('#kGrup').onclick = () => { const yeni = ks.map(x => x.id !== kid ? x : k.gruplu ? { ...x, gruplu: false } : icecekAyir(x)); s.konumlar = yeni; subeKaydet(sid, { konumlar: yeni }); render(); };
   $('#uEkle').onclick = () => urunSecici(sat.map(x => x.u), sec => { const n = [...sat, ...sec.map(u => ({ u, y: varsayilanYon(k, u) }))]; kaydet(n); render(); }, sid);
   if (admin()) $('#kAd').onclick = () => openSheet(`<h2>Konum adı</h2><label class="field"><span>Ad</span><input id="ka" value="${esc(k.ad)}"></label><div class="btns"><button class="btn" id="kk">Kaydet</button></div>`, el => { el.querySelector('#kk').onclick = () => { const ad = el.querySelector('#ka').value.trim(); if (!ad) return; subeKaydet(sid, { konumlar: ks.map(x => x.id === kid ? { ...x, ad } : x) }); closeSheet(); }; });
   if (admin()) $('#kSil').onclick = async () => { if (!(await onayla(`"${k.ad}" konumu ve içindeki ${sat.length} ürün satırı silinecek. Geçmiş sayımlar etkilenmez.`, 'Sil'))) return; subeKaydet(sid, { konumlar: ks.filter(x => x.id !== kid) }); geri(); };
@@ -1106,14 +1130,38 @@ function kullaniciPanel(uid) {
   });
 }
 
+/* Sayımdaki konum sekmelerini basılı tutup sürükleyerek sıralama */
+function sekmeSurukle() {
+  const bar = $('.ktabs'); if (!bar) return; const tabs = [...bar.querySelectorAll('.kt[data-k]')]; if (tabs.length < 2) return;
+  tabs.forEach(t => t.addEventListener('pointerdown', e => {
+    if (e.button > 0) return; const x0 = e.clientX, y0 = e.clientY; let aktif = false, hedef = tabs.indexOf(t); const idx = hedef;
+    const iptal = () => { clearTimeout(tm); t.removeEventListener('pointermove', mv0); t.removeEventListener('pointerup', son); t.removeEventListener('pointercancel', son); };
+    const tm = setTimeout(() => { aktif = true; t.classList.add('dragging'); try { t.setPointerCapture(e.pointerId); } catch (_) { } navigator.vibrate?.(15); }, 450);
+    const mv0 = ev => { if (!aktif) { if (Math.abs(ev.clientX - x0) > 8 || Math.abs(ev.clientY - y0) > 8) iptal(); return; }
+      ev.preventDefault(); const dx = ev.clientX - x0; t.style.transform = `translateX(${dx}px)`; t.style.zIndex = 5;
+      // sürüklenen sekmenin merkezi, diğer sekmelerin kayma öncesi (doğal) merkezlerine göre
+      const mer = t.getBoundingClientRect().left + t.offsetWidth / 2; let n = idx;
+      tabs.forEach((o, j) => { if (o === t) return; const tr = o.style.transform; const kay = tr ? parseFloat(tr.replace(/[^-\d.]/g, '')) : 0; const r = o.getBoundingClientRect(), c = r.left + r.width / 2 - kay;
+        if (j > idx && mer > c) n = Math.max(n, j); if (j < idx && mer < c) n = Math.min(n, j); });
+      hedef = n; const w = t.offsetWidth + 6; tabs.forEach((o, j) => { if (o === t) return; o.style.transform = (idx < hedef && j > idx && j <= hedef) ? `translateX(${-w}px)` : (idx > hedef && j < idx && j >= hedef) ? `translateX(${w}px)` : ''; }); };
+    const son = () => { const gez = aktif; iptal(); tabs.forEach(o => { o.style.transform = ''; o.style.zIndex = ''; o.classList.remove('dragging'); });
+      if (!gez) return; bar.dataset.surukle = '1'; setTimeout(() => delete bar.dataset.surukle, 300);
+      if (hedef === idx) return; const sb = sube(); const ids = tabs.map(o => o.dataset.k); ids.splice(hedef, 0, ids.splice(idx, 1)[0]);
+      const tum = sb.konumlar || []; const siraliGorunen = ids.map(id => tum.find(k => k.id === id)); let c = 0; const yeni = tum.map(k => ids.includes(k.id) ? siraliGorunen[c++] : k);
+      sb.konumlar = yeni; subeKaydet(S.subeId, { konumlar: yeni }); editor(); };
+    t.addEventListener('pointermove', mv0); t.addEventListener('pointerup', son); t.addEventListener('pointercancel', son);
+  }));
+  bar.addEventListener('click', e => { if (bar.dataset.surukle) { e.stopPropagation(); e.preventDefault(); } }, true);
+  bar.addEventListener('touchmove', e => { if ($('.kt.dragging')) e.preventDefault(); }, { passive: false });
+}
 /* ================= Sürükle-bırak liste ================= */
 function suruklenebilir(liste, birak) {
   if (!liste) return;
-  const sat = [...liste.querySelectorAll('.si')].filter(x => x.querySelector('.drag')); const topN = sat.length;
-  sat.forEach((it, i) => { const b = document.createElement('button'); b.className = 'sn'; b.type = 'button'; b.textContent = i + 1; b.title = 'Sıra numarası yazarak taşı';
+  const sat = [...liste.querySelectorAll('.si')].filter(x => x.querySelector('.drag')); const gercek = sat.filter(x => !x.classList.contains('sep')); const topN = gercek.length;
+  sat.forEach((it, fi) => { if (it.classList.contains('sep')) return; const i = gercek.indexOf(it); const b = document.createElement('button'); b.className = 'sn'; b.type = 'button'; b.textContent = i + 1; b.title = 'Sıra numarası yazarak taşı';
     b.onclick = () => openSheet(`<h2>${esc(it.querySelector('.nm')?.firstChild?.textContent || '')}</h2><p class="note">Şu an ${i + 1}. sırada. Kaçıncı sıraya taşınsın? (1–${topN})</p><label class="field"><span>Yeni sıra</span><input id="snI" inputmode="numeric" pattern="[0-9]*" placeholder="${i + 1}"></label><div class="btns"><button class="btn" id="snK">Taşı</button></div>`, el => {
       const inp = el.querySelector('#snI'); inp.focus();
-      const git = () => { const n = parseInt(inp.value, 10); if (!n) return; const h = Math.max(1, Math.min(topN, n)) - 1; closeSheet(); if (h !== i) birak(i, h); };
+      const git = () => { const n = parseInt(inp.value, 10); if (!n) return; const h = Math.max(1, Math.min(topN, n)) - 1; closeSheet(); if (h !== i) birak(fi, sat.indexOf(gercek[h])); };
       el.querySelector('#snK').onclick = git; inp.onkeydown = e => { if (e.key === 'Enter') git(); }; });
     it.querySelector('.drag').after(b); });
   liste.querySelectorAll('.drag').forEach(h => h.addEventListener('pointerdown', e => {

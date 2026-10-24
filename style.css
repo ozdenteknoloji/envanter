@@ -144,3 +144,8 @@ body.editing .toast{bottom:auto;top:calc(128px + env(safe-area-inset-top))}
 
 .sn{min-width:30px;height:28px;margin:0 4px 0 -2px;padding:0 6px;border:0;border-radius:8px;background:var(--soft,#eef0f3);color:var(--mut,#666);font-weight:600;font-size:12px;font-variant-numeric:tabular-nums;flex:none}
 .sn:active{background:var(--brand,#006491);color:#fff}
+
+.et tr.gh td{background:var(--soft);font-weight:800;font-size:11.5px;letter-spacing:.04em;color:var(--blue);text-align:left;height:34px;cursor:pointer;padding:6px 12px}
+.et tr.gh td span{float:right;font-weight:700;color:var(--mut)}
+.si.sep{background:var(--soft);padding:8px 12px;gap:10px;align-items:baseline;font-size:12px}.si.sep b{color:var(--blue);letter-spacing:.04em}.si.sep small{color:var(--mut)}
+.kt.dragging{box-shadow:0 4px 14px rgba(0,0,0,.25);opacity:.95;transition:none}.ktabs .kt{transition:transform .12s}
