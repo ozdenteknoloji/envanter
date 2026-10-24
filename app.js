@@ -256,8 +256,8 @@ function sayimListesi() {
   const gunlukBos = !(sb.gunluk || []).length; const konumBos = !(sb.konumlar || []).some(k => (k.satirlar || []).length);
   const kart = t => { const sy = bugunku(t); const ilk = t === 'haftalik' ? haftalikGunu : !haftalikGunu; const dis = konumBos || (t === 'gunluk' && gunlukBos);
     const ilr = sy ? ilerleme(sy, sb) : null;
-    return `<button class="btn ${ilk ? '' : 'alt'}" data-bas="${t}" ${dis ? 'disabled' : ''} style="margin-bottom:8px">${sy ? `${TUR[t]} sayıma devam et · ${ilr.say}/${ilr.n}` : `${TUR[t]} sayım başlat`}</button>`; };
-  const liste = S.sayimlar.map(sy => { const i = ilerleme(sy, sb); return `<button class="row" data-sy="${sy.id}"><div class="m"><b>${TUR[sy.tur] || sy.tur} · ${trTarih(sy.tarih)}</b><span>${i.say}/${i.n} satır · ${esc(sy.kim || sy.baslatan || '')} ${saat(sy.son || sy.basla)}</span><div class="bar"><i style="width:${i.n ? Math.round(i.say / i.n * 100) : 0}%"></i></div></div><span class="ch">›</span></button>`; }).join('');
+    return `<button class="btn ${ilk && !(sy && sy.durum === 'bitti') ? '' : 'alt'}" data-bas="${t}" ${dis ? 'disabled' : ''} style="margin-bottom:8px">${sy ? (sy.durum === 'bitti' ? `${TUR[t]} sayım bitti ✓ · görüntüle` : `${TUR[t]} sayıma devam et · ${ilr.say}/${ilr.n}`) : `${TUR[t]} sayım başlat`}</button>`; };
+  const liste = S.sayimlar.map(sy => { const i = ilerleme(sy, sb); return `<button class="row" data-sy="${sy.id}"><div class="m"><b>${TUR[sy.tur] || sy.tur} · ${trTarih(sy.tarih)} ${sy.durum === 'bitti' ? '<span class="tag g">Bitti</span>' : '<span class="tag a">Devam ediyor</span>'}</b><span>${i.say}/${i.n} satır · ${esc(sy.kim || sy.baslatan || '')} ${saat(sy.son || sy.basla)}</span><div class="bar"><i style="width:${i.n ? Math.round(i.say / i.n * 100) : 0}%"></i></div></div><span class="ch">›</span></button>`; }).join('');
   $('#app').innerHTML = ust(`${sb.ad} · Sayım`, { alt: trTarih(bg) }) + `<div class="pad">
     ${haftalikGunu ? `<div class="card p" style="background:var(--blue-soft);border-color:transparent"><b style="color:var(--blue)">Bugün haftalık sayım günü.</b><p class="note">Haftalık sayımda bütün ürünler sayılır.</p></div>` : ''}
     ${kart('haftalik')}${kart('gunluk')}
@@ -314,14 +314,17 @@ function editor() {
   if (fark) sol += ` · <a id="pGun">ayarlarda ${yaz(cs.y === 'koli' ? yeniC : yeniD)}, güncelle</a>`;
   const sonraki = k.satirlar[S.f.i + 1] ? urunAd(k.satirlar[S.f.i + 1].u) : (ks[ks.findIndex(x => x.id === k.id) + 1] ? '→ ' + ks[ks.findIndex(x => x.id === k.id) + 1].ad : 'bitti');
   const ilr = ilerleme(sy, sb);
-  $('#app').innerHTML = `<div class="ed">${ust(`${sb.ad} · ${TUR[sy.tur]} sayım`, { geri: true, alt: `${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır`, sag: `<button id="sonucBtn">Sonuç</button>` })}
+  $('#app').innerHTML = `<div class="ed">${ust(`${sb.ad} · ${TUR[sy.tur]} sayım`, { geri: true, alt: `${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır`, sag: (sy.durum === 'bitti' ? '' : `<button id="bitirBtn" style="background:#fff;color:var(--blue)">Bitir</button>`) + `<button id="sonucBtn">Sonuç</button>` })}
     <div class="ktabs">${tabs}${ayarTus}</div>
     <div class="edlist" id="edlist"><table class="et"><tr><th>Ürün</th><th>${k.satirlar.some(s => s.y === 'koli') ? 'Koli' : ''}${tartiVar ? (k.satirlar.some(s => s.y === 'koli') ? ' / ' : '') + 'Tartı' : ''}${!tartiVar && !k.satirlar.some(s => s.y === 'koli') ? 'Adet' : ''}</th>${tartiVar ? '<th>Kap</th>' : ''}<th>Toplam</th></tr>${rows}</table><div style="height:30px"></div></div>
     <div class="hint"><span>${sol}</span><span style="white-space:nowrap">Sonraki: <b>${esc(sonraki)}</b></span></div>
-    <div class="kp">${['1', '2', '3', 'del', '4', '5', '6', 'ekstra', '7', '8', '9', 'geri', ',', '0', 'ileri'].map(x => `<button class="k ${x === 'del' || x === 'geri' ? 's' : ''} ${x === 'ekstra' ? 's ac' : ''} ${x === 'ileri' ? 'go' : ''}" data-key="${x}">${{ del: '⌫', ekstra: S.f.a === 'x' ? '✓ Ekstra' : '+ Ekstra', geri: '‹ Geri', ileri: 'İleri ›' }[x] || x}</button>`).join('')}</div></div>`;
+    ${sy.durum === 'bitti' ? `<div class="hint" style="flex-direction:column;align-items:stretch;gap:8px;padding:12px"><span><b style="color:var(--green)">✓ Sayım bitirildi</b> · ${esc(sy.bitiren || '')} ${saat(sy.bitis)} · ${ilr.say}/${ilr.n} satır sayıldı. Değiştirmek için tekrar açın.</span><button class="btn alt" id="acBtn">Sayımı tekrar aç</button></div>` : `<div class="kp">${['1', '2', '3', 'del', '4', '5', '6', 'ekstra', '7', '8', '9', 'geri', ',', '0', 'ileri'].map(x => `<button class="k ${x === 'del' || x === 'geri' ? 's' : ''} ${x === 'ekstra' ? 's ac' : ''} ${x === 'ileri' ? 'go' : ''}" data-key="${x}">${{ del: '⌫', ekstra: S.f.a === 'x' ? '✓ Ekstra' : '+ Ekstra', geri: '‹ Geri', ileri: 'İleri ›' }[x] || x}</button>`).join('')}`}</div></div>`;
   const el = $('#edlist'); el.scrollTop = eskiScroll;
+  const bb = $('#bitirBtn'); if (bb) bb.onclick = () => sayimBitir(sy);
+  const ac = $('#acBtn'); if (ac) ac.onclick = () => { sy.durum = 'acik'; updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'acik' }).catch(hata); editor(); };
   bagla(); $('#sonucBtn').onclick = () => { commitBuf(); S.sonucId = sy.id; S.syId = null; gecmis.length = 0; setTab('sonuc'); };
   $('#app').querySelectorAll('.kt').forEach(b => b.onclick = () => { commitBuf(); S.ek = b.dataset.k; S.f = null; S.buf = null; editor(); $('#edlist').scrollTop = 0; gorunur(); });
+  if (sy.durum === 'bitti') return; // kilitli: hücre ve klavye çalışmaz
   $('#app').querySelectorAll('.cell').forEach(c => c.onclick = e => { e.stopPropagation(); commitBuf(); S.f = { k: S.ek, i: +c.dataset.i, a: c.dataset.a }; S.buf = null; editor(); });
   $('#app').querySelectorAll('td.n').forEach(c => c.onclick = () => { commitBuf(); S.f = { k: S.ek, i: +c.dataset.i, a: 'm' }; S.buf = null; editor(); });
   $('#app').querySelectorAll('.k').forEach(b => { b.addEventListener('pointerdown', e => { e.preventDefault(); tus(b.dataset.key); }); });
@@ -358,11 +361,22 @@ function konumMenusu() {
     };
   });
 }
+function sayimBitir(sy) {
+  commitBuf(); const sb = sube(); const ks = kapsam(sb, sy.tur); const ilr = ilerleme(sy, sb);
+  const eksik = ks.map(k => ({ ad: k.ad, n: k.satirlar.filter(s => !sayildi(deger(sy, k.id, s.u))).length })).filter(x => x.n);
+  openSheet(`<h2>Sayımı bitir</h2><p class="note" style="font-size:14px">${ilr.say} / ${ilr.n} satır sayıldı.${eksik.length ? ` Sayılmayan satırlar sonuçta <b>"sayılmadı"</b> olarak kalır, 0 sayılmaz.` : ' Bütün satırlar sayıldı.'}</p>
+    ${eksik.length ? `<div class="card" style="margin-top:10px">${eksik.map(x => `<div class="row" style="cursor:default"><div class="m"><b>${esc(x.ad)}</b></div><span class="tag a">${x.n} sayılmadı</span></div>`).join('')}</div>` : ''}
+    <p class="note">Bitirilen sayım kilitlenir; gerekirse "Sayımı tekrar aç" ile açılır.</p>
+    <div class="btns"><button class="btn alt" id="bV">Vazgeç</button><button class="btn" id="bB">Bitir</button></div>`, el => {
+    el.querySelector('#bV').onclick = closeSheet;
+    el.querySelector('#bB').onclick = () => { closeSheet(); Object.assign(sy, { durum: 'bitti', bitis: new Date().toISOString(), bitiren: benAd() }); updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'bitti', bitis: sy.bitis, bitiren: sy.bitiren }).catch(hata); S.sonucId = sy.id; S.syId = null; gecmis.length = 0; setTab('sonuc'); toast('Sayım bitirildi.'); };
+  });
+}
 function gorunur() { const el = $('#edlist'); const r = el && el.querySelector('tr.cur'); if (!r) return; const top = r.offsetTop, h = r.offsetHeight; if (top - 30 < el.scrollTop || top + h > el.scrollTop + el.clientHeight - 10) el.scrollTop = Math.max(0, top - el.clientHeight / 3); }
 function aktifHucre() { const sy = syBul(S.syId); const sb = sube(); if (!sy || !sb || !S.f) return null; const k = kapsam(sb, sy.tur).find(x => x.id === S.f.k); const s = k && k.satirlar[S.f.i]; return s ? { sy, k, s } : null; }
 function hucreBoya() { const c = $('.cell.f'); if (!c) return; c.textContent = S.buf ?? ''; c.classList.add('ty'); }
 function tus(key) {
-  const h = aktifHucre(); if (!h) return;
+  const h = aktifHucre(); if (!h || h.sy.durum === 'bitti') return;
   if (/^[0-9]$/.test(key) || key === ',') {
     let b = S.buf ?? ''; if (key === ',') { if (b.includes(',')) return; if (!b) b = '0'; }
     if (S.f.a === 'k' && key === ',') return;
@@ -390,7 +404,7 @@ function ilerle(dir) {
   const sy = syBul(S.syId); const ks = kapsam(sube(), sy.tur); const L = []; ks.forEach(k => k.satirlar.forEach((s, i) => L.push({ k: k.id, i })));
   const idx = L.findIndex(p => p.k === S.f.k && p.i === S.f.i); const n = idx + dir;
   if (n < 0) return editor();
-  if (n >= L.length) { toast('Listenin sonu ✓ Eksik kalan satırlar sekmelerde görünür.'); return editor(); }
+  if (n >= L.length) { toast('Listenin sonu ✓ Sayım tamamsa sağ üstten Bitir\'e basın.'); return editor(); }
   const p = L[n]; if (p.k !== S.f.k) { const a = ks.find(x => x.id === S.f.k), b = ks.find(x => x.id === p.k); if (dir > 0) toast(`${a.ad} bitti → ${b.ad}`); }
   const kd = p.k !== S.ek; S.ek = p.k; S.f = { k: p.k, i: p.i, a: 'm' }; editor(); if (kd) $('#edlist').scrollTop = 0; gorunur();
 }
@@ -415,7 +429,7 @@ function sonucEkrani() {
   const satir = (u, no) => { const x = tp[u]; const ur = S.urunler[u]; const ok = !!tik[u];
     return `<tr class="${ok ? 'ok' : ''}" data-u="${u}"><td class="c"><span class="box ${ok ? 'on' : ''}">${ok ? '✓' : ''}</span></td><td class="no">${no}</td><td>${esc(ur.ad)}${x && x.say < x.n && x.say > 0 ? '<span class="uns">eksik konum var</span>' : ''}${!x || !x.say ? `<span class="uns">sayılmadı</span>` : ''}${sktEtiket(u, sy)}</td><td class="v">${fmt(x ? x.t : 0, ur.birim)}<small>${ur.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`; };
   const ilr = ilerleme(sy, sb);
-  $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır sayıldı` }) + `<div class="pad">
+  $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
     <div class="chips">${secim}</div>
     <div class="card"><div style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)"><span class="note" style="margin:0">Sisteme girdikçe dokunup işaretleyin</span><span class="tag ${tikli === top ? 'g' : 'b'}">${tikli} / ${top}</span></div>
     <table class="st">${sira.map((u, i) => satir(u, i + 1)).join('')}
