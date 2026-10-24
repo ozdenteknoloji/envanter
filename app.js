@@ -866,7 +866,7 @@ function ayarlar() {
   bagla();
   const sd = $('#seed'); if (sd) sd.onclick = seedYukle; $('#seed2').onclick = seedYukle;
   $('#app').querySelectorAll('[data-sb]').forEach(b => b.onclick = () => go({ ar: 'sube:' + b.dataset.sb }));
-  $('#gAi').onclick = aiPanel; $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => { S.urunAra = ''; go({ ar: 'urunler' }); }; $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
+  $('#gAi').onclick = aiPanel; $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => { S.urunAra = ''; S.urunFlt = 'hepsi'; go({ ar: 'urunler' }); }; $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
 }
 async function seedYukle() {
   const { SEED } = await import('./seed.js?v=11');
@@ -1030,12 +1030,16 @@ function urunlerAyar() {
   const tum = urunlerSirali(); const l = tum.filter(u => u.aktif !== false); const kalk = tum.filter(u => u.aktif === false); const kullanim = {}; Object.values(S.subeler).forEach(s => subedekiUrunler(s).forEach(u => kullanim[u] = (kullanim[u] || 0) + 1));
   $('#app').innerHTML = ust('Ürünler', { geri: true, subeSecici: false, alt: `${l.length} ürün · bütün şubeler için ortak` }) + `<div class="pad">
     <div class="btns" style="margin:0 0 10px"><button class="btn" id="uYeni">+ Yeni ürün</button><button class="btn alt" id="uExcel">Excel'den yükle</button></div>
-    <input class="search" id="ua" placeholder="Ara…" value="${esc(S.urunAra || '')}"><p class="note" style="margin:0 0 8px"><b>Günlük</b>: günlük sayımda sayılsın (haftalıkta zaten hepsi sayılır). <b>Sipariş</b>: sipariş listesinde çıkar. Burası <b>bütün şubeler için varsayılan</b>; her şube kendi ayarlarından (Günlük / haftalık listesi) kendi için değiştirebilir.</p>
-    <div class="card">${l.map(u => `<div class="row" data-ad="${esc(ascii(u.ad))}" ${S.urunAra && !ascii(u.ad).includes(ascii(S.urunAra)) ? 'hidden' : ''} style="cursor:default"><div class="m" data-u="${u.id}" style="cursor:pointer"><b>${esc(u.ad)}${u.sube ? ` <span class="tag b">sadece ${esc(S.subeler[u.sube]?.ad || u.sube)}</span>` : ''}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''} · ${kullanim[u.id] || 0} şube${u.sktGun ? ` · <span style="color:var(--amber);font-weight:700">SKT ${u.sktGun} gün</span>` : ''}</span></div>
+    <input class="search" id="ua" placeholder="Ara…" value="${esc(S.urunAra || '')}">
+    <div class="chips" id="uf">${[['hepsi', 'Hepsi', l.length], ['gunluk', 'Günlük', l.filter(u => u.gunluk).length], ['siparis', 'Sipariş', l.filter(u => u.siparis).length]].map(([k, a, n]) => `<button class="chip ${(S.urunFlt || 'hepsi') === k ? 'on' : ''}" data-f="${k}">${a} (${n})</button>`).join('')}</div><p class="note" style="margin:0 0 8px"><b>Günlük</b>: günlük sayımda sayılsın (haftalıkta zaten hepsi sayılır). <b>Sipariş</b>: sipariş listesinde çıkar. Burası <b>bütün şubeler için varsayılan</b>; her şube kendi ayarlarından (Günlük / haftalık listesi) kendi için değiştirebilir.</p>
+    <div class="card">${l.map(u => `<div class="row" data-ad="${esc(ascii(u.ad))}" data-gn="${u.gunluk ? 1 : 0}" data-sp="${u.siparis ? 1 : 0}" style="cursor:default"><div class="m" data-u="${u.id}" style="cursor:pointer"><b>${esc(u.ad)}${u.sube ? ` <span class="tag b">sadece ${esc(S.subeler[u.sube]?.ad || u.sube)}</span>` : ''}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''} · ${kullanim[u.id] || 0} şube${u.sktGun ? ` · <span style="color:var(--amber);font-weight:700">SKT ${u.sktGun} gün</span>` : ''}</span></div>
       <button class="chip ${u.gunluk ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="gunluk" data-id="${u.id}">${u.gunluk ? '✓ ' : ''}Günlük</button><button class="chip ${u.siparis ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="siparis" data-id="${u.id}">${u.siparis ? '✓ ' : ''}Sipariş</button></div>`).join('')}</div>
     ${kalk.length ? `<details class="card" style="padding:0"><summary class="row" style="list-style:none"><div class="m"><b>Kaldırılan ürünler (${kalk.length})</b><span>Sayımlarda ve listelerde görünmezler · dokunup geri alabilirsiniz</span></div><span class="ch">▾</span></summary>${kalk.map(u => `<button class="row" data-u="${u.id}" data-ad="${esc(ascii(u.ad))}"><div class="m"><b style="color:var(--mut)">${esc(u.ad)}</b><span>${u.kaldirma ? 'kaldırıldı ' + trTarih(u.kaldirma.slice(0, 10)) : 'kaldırıldı'}</span></div></button>`).join('')}</details>` : ''}</div>`;
   bagla();
-  $('#ua').oninput = e => { S.urunAra = e.target.value; const q = ascii(e.target.value); $('#app').querySelectorAll('[data-ad]').forEach(l => l.hidden = q && !l.dataset.ad.includes(q)); };
+  const uygula = () => { const q = ascii(S.urunAra || ''), fl = S.urunFlt || 'hepsi'; $('#app').querySelectorAll('.row[data-gn]').forEach(l => l.hidden = !((!q || l.dataset.ad.includes(q)) && (fl === 'hepsi' || (fl === 'gunluk' ? l.dataset.gn === '1' : l.dataset.sp === '1')))); };
+  $('#ua').oninput = e => { S.urunAra = e.target.value; uygula(); };
+  $('#app').querySelectorAll('#uf [data-f]').forEach(b => b.onclick = () => { S.urunFlt = b.dataset.f; render(); });
+  uygula();
   $('#app').querySelectorAll('[data-u]').forEach(b => b.onclick = () => urunPanel(b.dataset.u));
   $('#app').querySelectorAll('[data-sy][data-id]').forEach(b => b.onclick = () => { const id = b.dataset.id, t = b.dataset.sy; const x = S.urunler[id]; const yeni = t === 'haftalik' ? x.haftalik === false : !x[t]; x[t] = yeni; updateDoc(doc(db, 'genel', 'urunler'), { [`u.${id}.${t}`]: yeni }).catch(hata); const y = window.scrollY; render(); window.scrollTo(0, y); });
   $('#uYeni').onclick = () => urunPanel(null); $('#uExcel').onclick = seedYukle;
