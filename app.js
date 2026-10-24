@@ -484,7 +484,7 @@ function sonucEkrani() {
   const disarida = [];
 
   const satir = (u, no) => { const x = tp[u]; const ur = S.urunler[u]; 
-    return `<tr data-u="${u}"><td class="no">${no}</td><td>${esc(ur.ad)}${x && x.say < x.n && x.say > 0 ? '<span class="uns">eksik konum var</span>' : ''}${!x || !x.say ? `<span class="uns">sayılmadı</span>` : ''}${sktEtiket(u, sy)}</td><td class="v">${fmt(x ? x.t : 0, ur.birim)}<small>${ur.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`; };
+    return `<tr data-u="${u}"><td class="no">${no}</td><td>${esc(ur.ad)}${!x || !x.say ? `<span class="uns">sayılmadı</span>` : ''}${sktEtiket(u, sy)}</td><td class="v">${fmt(x ? x.t : 0, ur.birim)}<small>${ur.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`; };
   const ilr = ilerleme(sy, sb);
   $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
     <div class="card">
