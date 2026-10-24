@@ -862,6 +862,7 @@ function yeniSube() {
     };
   });
 }
+const isaretKaydet = (id, o) => updateDoc(doc(db, 'subeler', id), { isaret: o }).catch(hata); // merge haritaları birleştirir; silinen kayıt kalmasın diye alan komple değiştirilir
 const subeKaydet = (id, patch) => setDoc(doc(db, 'subeler', id), patch, { merge: true }).catch(hata);
 function subeAyar(id, kok) {
   const s = S.subeler[id]; if (!s) { $('#app').innerHTML = ust('Şube', { geri: true }) + '<div class="empty"><b>Şube yok</b></div>'; return bagla(); }
@@ -974,7 +975,7 @@ function yerlerAyar(sid) {
       <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">${ks.map(k => { const on = yer[u.id]?.has(k.id); return `<button class="chip ${on ? 'on' : ''}" style="padding:5px 9px;font-size:12px" data-u="${u.id}" data-k="${k.id}">${on ? '✓ ' : ''}${esc(k.ad)}</button>`; }).join('')}${yer[u.id] ? (() => { const g = sayimdaMi(s, u.id, 'gunluk'), o = s.isaret?.[u.id]?.g; return `<button class="chip ${g ? 'on' : ''}" style="padding:5px 9px;font-size:12px;margin-left:auto${o != null ? ';outline:2px solid var(--amber)' : ''}" data-gun="${u.id}">${g ? '✓ ' : ''}Günlük</button>`; })() : ''}</div></div>`).join('') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div></div>`;
   bagla(); window.scrollTo(0, eskiY);
   $('#app').querySelectorAll('[data-gun]').forEach(b => b.onclick = () => { const u = b.dataset.gun, x = S.urunler[u]; const o = { ...(s.isaret || {}) }; const e = { ...(o[u] || {}) }; const yeni = !sayimdaMi(s, u, 'gunluk');
-    if (yeni === varsGun(x)) delete e.g; else e.g = yeni; delete e.h; if (Object.keys(e).length) o[u] = e; else delete o[u]; s.isaret = o; subeKaydet(sid, { isaret: o }); render(); });
+    if (yeni === varsGun(x)) delete e.g; else e.g = yeni; delete e.h; if (Object.keys(e).length) o[u] = e; else delete o[u]; s.isaret = o; isaretKaydet(sid, o); render(); });
   $('#ya').oninput = e => { S.yerAra = e.target.value; const qq = ascii(e.target.value); $('#app').querySelectorAll('.yr').forEach(r => { const u = l.find(x => ascii(x.ad) === r.dataset.ad); r.hidden = !((f !== 'yok' || !yer[u?.id]) && (!qq || r.dataset.ad.includes(qq))); }); };
   $('#app').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.yerFiltre = b.dataset.f; render(); });
   $('#yOzel').onclick = () => urunPanel(null, { sube: sid });
