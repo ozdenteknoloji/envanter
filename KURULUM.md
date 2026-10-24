@@ -30,7 +30,8 @@ Telefonda adresi açın → tarayıcı menüsü → **Ana ekrana ekle**.
 - Sayım şekli (konum ayarından): **Koli** = koli × koli içi + ekstra · **Tartı** = brüt kg − kap sayısı × dara + ekstra · **Adet** = adet + ekstra.
 - Koli içi ya da dara değişirse yeni sayımlar yeni değerle hesaplanır, eski sayımlar eski değerle kalır.
 - İnternet yoksa (soğuk hava deposu) yazılanlar telefonda tutulur, bağlantı gelince gönderilir.
-- Sayımlar 7 gün saklanır.
+- Her şubede sadece **son bitmiş günlük** ve **son bitmiş haftalık** sayım ile o günün devam eden sayımı saklanır. Önceki günden bitirilmeden kalan sayım kendiliğinden bitirilmiş sayılır. SKT ve sipariş her ürün için bu iki sayımdan daha yeni olanını kullanır.
+- Gece 00:00–06:00 arası başlatılan sayım bir önceki günün sayımıdır.
 
 ## Ürün yerleri
 **Ayarlar → Şube → Ürün yerleri**: her ürünün altında şubenin konumları düğme olarak durur; dokununca ürün o konumun sonuna eklenir, tekrar dokununca çıkar. "Hiçbir yerde olmayanlar" filtresi sayılmayacak ürünleri gösterir. Sayım şekli kendiliğinden seçilir (Makeline'da darası varsa tartı; diğer konumlarda koli içi varsa koli; yoksa adet), konum sayfasından değiştirilebilir.

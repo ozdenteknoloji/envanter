@@ -106,7 +106,7 @@ function subeSec(id) {
   S.unsub.sy = onSnapshot(query(collection(db, 'sayimlar'), where('sube', '==', sid)), s => {
     if (sid !== S.subeId) return;
     S.sayimlar = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.id.localeCompare(a.id));
-    eskiSayimlariSil(); render();
+    sayimlariDuzenle(); render();
   }, hata);
 }
 // Son 7 günden eski sayımlar silinir (veri büyümesin).
@@ -126,11 +126,18 @@ function gunlukKur() { return; // her şubede günlük liste bir kez, boşsa dol
     if (!l.length) continue; s.gunlukKuruldu = true; s.gunluk = l; subeKaydet(sid, { gunluk: l, gunlukKuruldu: true });
   }
 }
-function eskiSayimlariSil() {
-  if (S.temizlendi[S.subeId] || !S.sayimlar.length) return; S.temizlendi[S.subeId] = 1;
-  const sinir = new Date(); sinir.setDate(sinir.getDate() - 7); const s = sinir.toLocaleDateString('sv-SE');
-  const eski = S.sayimlar.filter(x => x.tarih < s); if (!eski.length) return;
-  const b = writeBatch(db); eski.forEach(x => b.delete(doc(db, 'sayimlar', x.id))); b.commit().catch(() => { });
+// Saklama: her türden (günlük / haftalık) sadece son bitmiş sayım + bugünün devam eden sayımı kalır.
+// Önceki günlerden bitirilmeden kalmış sayım kendiliğinden bitirilmiş sayılır.
+function sayimlariDuzenle(zorla) {
+  if ((!zorla && S.temizlendi[S.subeId]) || !S.sayimlar.length) return; S.temizlendi[S.subeId] = 1;
+  const bg = isGunu(); const b = writeBatch(db); let n = 0;
+  for (const tur of ['gunluk', 'haftalik']) {
+    const l = S.sayimlar.filter(x => x.tur === tur);
+    for (const x of l) if (x.durum !== 'bitti' && x.tarih < bg) { Object.assign(x, { durum: 'bitti', bitis: x.son || x.basla, bitiren: 'otomatik' }); b.update(doc(db, 'sayimlar', x.id), { durum: 'bitti', bitis: x.bitis, bitiren: 'otomatik' }); n++; }
+    const biten = l.filter(x => x.durum === 'bitti').sort((a, c) => c.tarih.localeCompare(a.tarih) || (c.bitis || '').localeCompare(a.bitis || ''));
+    for (const x of biten.slice(1)) { b.delete(doc(db, 'sayimlar', x.id)); n++; }
+  }
+  if (n) b.commit().catch(() => { });
 }
 
 /* İçecek adları tek düzen: önce boyut/ambalaj, sonra ad (eski kayıtlar bir kez yeniden adlandırılır). */
@@ -278,7 +285,7 @@ function sayimListesi() {
     ${bg !== bugun() ? `<p class="note" style="text-align:center">Saat 06:00'dan önce yapılan sayım ${trTarih(bg)} sayımı olarak kaydedilir.</p>` : ''}
     <div class="card" style="margin-top:20px">
       ${!konumBos ? `<div class="row" style="cursor:default"><div class="m"><b>${digerSy ? '' : diger === 'haftalik' ? `Haftalık sayım günü: ${GUNU[hg]}` : 'Bugün sadece günlük ürünler mi sayılacak?'}</b><span>${dugme(diger, false)}</span></div></div>` : ''}
-      <button class="row" id="gecmisBtn"><div class="m"><b>Sayım geçmişi</b><span>Son 7 günün sayımları ve sonuçları</span></div><span class="ch">›</span></button></div></div>`;
+      <button class="row" id="gecmisBtn"><div class="m"><b>Son sayımlar</b><span>Son günlük ve son haftalık sayım, sonuçlarıyla</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
   $('#app').querySelectorAll('[data-bas]').forEach(b => b.onclick = async e => { e.preventDefault(); const t = b.dataset.bas;
     if (t === 'haftalik' && !haftalikGunu && !bugunku('haftalik') && !(await onayla(`Bugün ${GUNU[haftaGunu(bg)]}; haftalık sayım günü ${GUNU[hg]}. Yine de bütün ürünlerin sayıldığı haftalık sayım başlatılsın mı?`, 'Başlat'))) return;
@@ -288,7 +295,7 @@ function sayimListesi() {
 function sayimGecmisi() {
   const sb = sube();
   const liste = S.sayimlar.map(sy => { const i = ilerleme(sy, sb); return `<button class="row" data-sy="${sy.id}"><div class="m"><b>${TUR[sy.tur] || sy.tur} · ${trTarih(sy.tarih)}</b><span>${i.say}/${i.n} satır · ${esc(sy.kim || sy.baslatan || '')} ${saat(sy.son || sy.basla)}</span><div class="bar"><i style="width:${i.n ? Math.round(i.say / i.n * 100) : 0}%"></i></div></div><span class="tag ${sy.durum === 'bitti' ? 'g' : 'a'}" style="display:inline-block">${sy.durum === 'bitti' ? 'Bitti' : 'Devam ediyor'}</span><span class="ch">›</span></button>`; }).join('');
-  $('#app').innerHTML = ust(`${sb.ad} · Sayım geçmişi`, { geri: true, alt: 'Son 7 gün · daha eskiler otomatik silinir' }) + `<div class="pad"><div class="card">${liste || '<div class="empty" style="padding:20px">Henüz sayım yok.</div>'}</div></div>`;
+  $('#app').innerHTML = ust(`${sb.ad} · Son sayımlar`, { geri: true, alt: 'Son günlük ve son haftalık sayım saklanır' }) + `<div class="pad"><div class="card">${liste || '<div class="empty" style="padding:20px">Henüz sayım yok.</div>'}</div></div>`;
   bagla();
   $('#app').querySelectorAll('[data-sy]').forEach(b => b.onclick = () => go({ syId: b.dataset.sy }));
 }
@@ -393,7 +400,7 @@ function sayimBitir(sy) {
     <p class="note">Bitirilen sayım kilitlenir; gerekirse "Sayımı tekrar aç" ile açılır.</p>
     <div class="btns"><button class="btn alt" id="bV">Vazgeç</button><button class="btn" id="bB">Bitir</button></div>`, el => {
     el.querySelector('#bV').onclick = closeSheet;
-    el.querySelector('#bB').onclick = () => { closeSheet(); Object.assign(sy, { durum: 'bitti', bitis: new Date().toISOString(), bitiren: benAd() }); updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'bitti', bitis: sy.bitis, bitiren: sy.bitiren }).catch(hata); go({ syId: null, tab: 'sayim', ar: 'sonuc', sonucId: sy.id }); toast('Sayım bitirildi.'); };
+    el.querySelector('#bB').onclick = () => { closeSheet(); Object.assign(sy, { durum: 'bitti', bitis: new Date().toISOString(), bitiren: benAd() }); updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'bitti', bitis: sy.bitis, bitiren: sy.bitiren }).catch(hata); sayimlariDuzenle(true); go({ syId: null, tab: 'sayim', ar: 'sonuc', sonucId: sy.id }); toast('Sayım bitirildi.'); };
   });
 }
 function gorunur() { const el = $('#edlist'); const r = el && el.querySelector('tr.cur'); if (!r) return; const top = r.offsetTop, h = r.offsetHeight; if (top - 30 < el.scrollTop || top + h > el.scrollTop + el.clientHeight - 10) el.scrollTop = Math.max(0, top - el.clientHeight / 3); }
