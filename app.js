@@ -60,13 +60,14 @@ const urunlerSirali = () => Object.entries(S.urunler).map(([id, u]) => ({ id, ..
 const gecmis = [];
 function go(patch) { commitBuf(); gecmis.push({ tab: S.tab, ar: S.ar, syId: S.syId }); history.pushState({ n: gecmis.length }, ''); Object.assign(S, patch); S.f = null; S.buf = null; render(); window.scrollTo(0, 0); }
 window.addEventListener('popstate', () => { const p = gecmis.pop(); if (!p) return; commitBuf(); closeSheet(); Object.assign(S, p); S.f = null; S.buf = null; render(); });
-const geri = () => history.back();
+// Geri: geçmiş varsa tarayıcı geri; yenilemeden sonra geçmiş boşsa bir üst ekrana (sayım listesi) dön
+const geri = () => { if (gecmis.length) return history.back(); commitBuf(); closeSheet(); S.syId = null; S.ar = null; S.f = null; S.buf = null; render(); };
 function setTab(t) { commitBuf(); gecmis.length = 0; S.tab = t; S.ar = null; S.syId = null; S.f = null; render(); window.scrollTo(0, 0); }
 
 /* ================= Giriş ================= */
 onAuthStateChanged(auth, async u => {
   for (const f of Object.values(S.unsub)) try { f(); } catch (e) { }
-  S.gor = (() => { try { return JSON.parse(sessionStorage.getItem('env_gor')); } catch (e) { return null; } })(); S.gorYuklendi = false; S.unsub = {}; S.user = u; S.subeSecildi = false; S.me = null; S.tab = 'sayim'; S.ar = null; S.syId = null; S.sonucId = null; S.subeId = null; S.f = null; S.buf = null; gecmis.length = 0; S.meYuklendi = false; S.subeler = {}; S.sayimlar = []; S.urunler = {}; S.urunYuklendi = false;
+  S.gor = GOR0.v; S.gorYuklendi = false; S.unsub = {}; S.user = u; S.subeSecildi = false; S.me = null; S.tab = 'sayim'; S.ar = null; S.syId = null; S.sonucId = null; S.subeId = null; S.f = null; S.buf = null; gecmis.length = 0; S.meYuklendi = false; S.subeler = {}; S.sayimlar = []; S.urunler = {}; S.urunYuklendi = false;
   if (!u) return render();
   S.unsub.me = onSnapshot(doc(db, 'kullanicilar', u.uid), async s => {
     S.me = s.exists() ? s.data() : null; S.meYuklendi = true;
@@ -184,6 +185,7 @@ function adlariDuzenle() {
   if (Object.keys(p).length) updateDoc(doc(db, 'genel', 'urunler'), p).then(() => toast([ad ? `${ad} ürün adı düzenlendi` : '', Object.keys(p).some(k => k.endsWith('.aktif')) ? 'kopya XL soslar kaldırıldı' : '', ek ? `${ek} yeni içecek eklendi` : ''].filter(Boolean).join(' · ') + '.')).catch(() => { adDuzenYapildi = false; });
 }
 /* ================= Çizim ================= */
+const GOR0 = { v: (() => { try { return JSON.parse(sessionStorage.getItem('env_gor')); } catch (e) { return null; } })() }; // sayfa yüklenirken bir kez okunur
 // Bildirimden gelen yönlendirme: ?git=skt|irs&sube=id
 function gitOku(q) { const p = new URLSearchParams(q); if (p.get('git')) S.git = { git: p.get('git'), sube: p.get('sube') }; }
 gitOku(location.search);
@@ -191,10 +193,9 @@ try { if (location.search.includes('git=')) history.replaceState(null, '', locat
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.git) { gitOku(e.data.git); render(); } });
 // Sayfa yenilenince kaldığın yerden devam: sekme, ekran ve açık sayım sessionStorage'dan geri yüklenir
 function gorunumGeriYukle() {
-  const g = S.gor; S.gor = null; S.gorYuklendi = true;
+  const g = S.gor; S.gor = null; GOR0.v = null; S.gorYuklendi = true;
   if (g.sube && subeIds().includes(g.sube)) { S.subeSecildi = true; if (g.sube !== S.subeId) subeSec(g.sube); }
   if (g.tab && g.tab !== 'sayim' || g.ar || g.syId) { S.tab = g.tab || 'sayim'; S.ar = g.ar || null; S.sonucId = g.sonucId || null;
-    if (g.ar || g.syId) gecmis.push({ tab: S.tab, ar: null, syId: null });
     if (g.syId) { S.gorSy = g.syId; setTimeout(() => { S.gorSy = null; }, 5000); } }
 }
 function gitUygula() {
@@ -419,17 +420,18 @@ function sayimListesi() {
   const ana = haftalikGunu ? 'haftalik' : 'gunluk'; const diger = ana === 'haftalik' ? 'gunluk' : 'haftalik';
   const bos = t => !kapsam(sb, t).length;
   const dugme = (t, buyuk) => { const sy = bugunku(t); const ilr = sy ? ilerleme(sy, sb) : null; const dis = konumBos || bos(t);
-    const yazi = !sy ? (buyuk ? 'Sayıma başla' : `${TUR[t]} sayım başlat`) : sy.durum === 'bitti' ? `${TUR[t]} sayım bitti ✓ · görüntüle` : `${TUR[t]} sayıma devam et · ${ilr.say}/${ilr.n}`;
-    return buyuk ? `<button class="btn ${sy && sy.durum === 'bitti' ? 'alt' : ''}" data-bas="${t}" ${dis ? 'disabled' : ''} style="padding:22px;font-size:19px;margin-top:8px">${yazi}</button><p class="note" style="text-align:center">${TUR[t]} sayım${t === 'haftalik' ? ' · bugün haftalık sayım günü, bütün ürünler sayılır' : ''}</p>`
+    const yazi = !sy ? (buyuk && !haftalikGunu ? 'Sayıma başla' : `${TUR[t]} sayım başlat`) : sy.durum === 'bitti' ? `${TUR[t]} sayım bitti ✓ · görüntüle` : `${TUR[t]} sayıma devam et · ${ilr.say}/${ilr.n}`;
+    return buyuk ? `<button class="btn ${sy && sy.durum === 'bitti' ? 'alt' : ''}" data-bas="${t}" ${dis ? 'disabled' : ''} style="padding:22px;font-size:19px;margin-top:8px">${yazi}</button><p class="note" style="text-align:center">${TUR[t]} sayım${t === 'haftalik' ? ' · bütün ürünler sayılır' : haftalikGunu ? ' · sadece günlük ürünler sayılır' : ''}</p>`
       : `<a href="#" data-bas="${t}" style="color:var(--blue);font-weight:700">${yazi}</a>`; };
   const digerSy = bugunku(diger);
   $('#app').innerHTML = ust(`${sb.ad} · Sayım`, { alt: trTarih(bg) }) + `<div class="pad">
     ${eksikIrsKutusu(sb)}
-    ${dugme(ana, true)}
+    ${haftalikGunu ? `<p class="note" style="text-align:center;margin-bottom:0">Bugün haftalık sayım günü: hangisini yapacağınızı seçin</p>` : ''}
+    ${dugme(ana, true)}${haftalikGunu ? dugme('gunluk', true).replace('class="btn "', 'class="btn alt"') : ''}
     ${konumBos ? `<p class="note">Bu şubenin konumlarına henüz ürün eklenmemiş.${admin() ? ' Ayarlar → Şubeler bölümünden ekleyin.' : ''}</p>` : bos(ana) ? `<p class="note">${TUR[ana]} sayılacak ürün seçilmemiş.${admin() ? ' Ayarlar → Ürünler listesinde "Günlük" / "Haftalık" işaretlerini açın.' : ''}</p>` : ''}
     ${bg !== bugun() ? `<p class="note" style="text-align:center">Saat 06:00'dan önce yapılan sayım ${trTarih(bg)} sayımı olarak kaydedilir.</p>` : ''}
     <div class="card" style="margin-top:20px">
-      ${!konumBos ? `<div class="row" style="cursor:default"><div class="m"><b>${digerSy ? '' : diger === 'haftalik' ? `Haftalık sayım günü: ${GUNU[hg]}` : 'Bugün sadece günlük ürünler mi sayılacak?'}</b><span>${dugme(diger, false)}</span></div></div>` : ''}
+      ${!konumBos && !haftalikGunu ? `<div class="row" style="cursor:default"><div class="m"><b>${digerSy ? '' : diger === 'haftalik' ? `Haftalık sayım günü: ${GUNU[hg]}` : 'Bugün sadece günlük ürünler mi sayılacak?'}</b><span>${dugme(diger, false)}</span></div></div>` : ''}
       <button class="row" id="gecmisBtn"><div class="m"><b>Son sayımlar</b><span>Son günlük ve son haftalık sayım, sonuçlarıyla</span></div><span class="ch">›</span></button></div></div>`;
   bagla(); if ($('#irEkleU')) $('#irEkleU').onclick = () => { S.tab = 'skt'; S.ar = null; render(); irsaliyeEkle(); };
   $('#app').querySelectorAll('[data-bas]').forEach(b => b.onclick = async e => { e.preventDefault(); const t = b.dataset.bas;
@@ -439,10 +441,11 @@ function sayimListesi() {
 }
 function sayimGecmisi() {
   const sb = sube();
-  const liste = S.sayimlar.map(sy => { const i = ilerleme(sy, sb); return `<button class="row" data-sy="${sy.id}"><div class="m"><b>${TUR[sy.tur] || sy.tur} · ${trTarih(sy.tarih)}</b><span>${i.say}/${i.n} satır · ${esc(sy.kim || sy.baslatan || '')} ${saat(sy.son || sy.basla)}</span><div class="bar"><i style="width:${i.n ? Math.round(i.say / i.n * 100) : 0}%"></i></div></div><span class="tag ${sy.durum === 'bitti' ? 'g' : 'a'}" style="display:inline-block">${sy.durum === 'bitti' ? 'Bitti' : 'Devam ediyor'}</span><span class="ch">›</span></button>`; }).join('');
+  const liste = S.sayimlar.map(sy => { const i = ilerleme(sy, sb); return `<div class="row" data-sy="${sy.id}" style="cursor:pointer"><div class="m"><b>${TUR[sy.tur] || sy.tur} · ${trTarih(sy.tarih)}</b><span>${i.say}/${i.n} satır · ${esc(sy.kim || sy.baslatan || '')} ${saat(sy.son || sy.basla)}</span><div class="bar"><i style="width:${i.n ? Math.round(i.say / i.n * 100) : 0}%"></i></div><button class="chip on" data-so="${sy.id}" style="margin-top:8px;padding:6px 14px;font-size:13px">📊 Sonuç</button></div><span class="tag ${sy.durum === 'bitti' ? 'g' : 'a'}" style="display:inline-block">${sy.durum === 'bitti' ? 'Bitti' : 'Devam ediyor'}</span><span class="ch">›</span></div>`; }).join('');
   $('#app').innerHTML = ust(`${sb.ad} · Son sayımlar`, { geri: true, alt: 'Son günlük ve son haftalık sayım saklanır' }) + `<div class="pad"><div class="card">${liste || '<div class="empty" style="padding:20px">Henüz sayım yok.</div>'}</div></div>`;
   bagla();
   $('#app').querySelectorAll('[data-sy]').forEach(b => b.onclick = () => go({ syId: b.dataset.sy }));
+  $('#app').querySelectorAll('[data-so]').forEach(b => b.onclick = e => { e.stopPropagation(); S.sonucId = b.dataset.so; go({ ar: 'sonuc' }); });
 }
 async function sayimBaslat(tur) {
   const id = `${S.subeId}_${isGunu()}_${tur}`;
