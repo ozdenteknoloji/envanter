@@ -66,7 +66,7 @@ function setTab(t) { commitBuf(); gecmis.length = 0; S.tab = t; S.ar = null; S.s
 /* ================= Giriş ================= */
 onAuthStateChanged(auth, async u => {
   for (const f of Object.values(S.unsub)) try { f(); } catch (e) { }
-  S.unsub = {}; S.user = u; S.subeSecildi = false; S.me = null; S.tab = 'sayim'; S.ar = null; S.syId = null; S.sonucId = null; S.subeId = null; S.f = null; S.buf = null; gecmis.length = 0; S.meYuklendi = false; S.subeler = {}; S.sayimlar = []; S.urunler = {}; S.urunYuklendi = false;
+  S.gor = (() => { try { return JSON.parse(sessionStorage.getItem('env_gor')); } catch (e) { return null; } })(); S.gorYuklendi = false; S.unsub = {}; S.user = u; S.subeSecildi = false; S.me = null; S.tab = 'sayim'; S.ar = null; S.syId = null; S.sonucId = null; S.subeId = null; S.f = null; S.buf = null; gecmis.length = 0; S.meYuklendi = false; S.subeler = {}; S.sayimlar = []; S.urunler = {}; S.urunYuklendi = false;
   if (!u) return render();
   S.unsub.me = onSnapshot(doc(db, 'kullanicilar', u.uid), async s => {
     S.me = s.exists() ? s.data() : null; S.meYuklendi = true;
@@ -189,8 +189,16 @@ function gitOku(q) { const p = new URLSearchParams(q); if (p.get('git')) S.git =
 gitOku(location.search);
 try { if (location.search.includes('git=')) history.replaceState(null, '', location.pathname); } catch (e) { }
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.git) { gitOku(e.data.git); render(); } });
+// Sayfa yenilenince kaldığın yerden devam: sekme, ekran ve açık sayım sessionStorage'dan geri yüklenir
+function gorunumGeriYukle() {
+  const g = S.gor; S.gor = null; S.gorYuklendi = true;
+  if (g.sube && subeIds().includes(g.sube)) { S.subeSecildi = true; if (g.sube !== S.subeId) subeSec(g.sube); }
+  if (g.tab && g.tab !== 'sayim' || g.ar || g.syId) { S.tab = g.tab || 'sayim'; S.ar = g.ar || null; S.sonucId = g.sonucId || null;
+    if (g.ar || g.syId) gecmis.push({ tab: S.tab, ar: null, syId: null });
+    if (g.syId) { S.gorSy = g.syId; setTimeout(() => { S.gorSy = null; }, 5000); } }
+}
 function gitUygula() {
-  const g = S.git; S.git = null;
+  const g = S.git; S.git = null; S.gor = null; S.gorYuklendi = true;
   if (g.sube && subeIds().includes(g.sube)) { S.subeSecildi = true; subeSec(g.sube); }
   S.tab = 'skt'; S.ar = null; S.syId = null; gecmis.length = 0;
   if (g.git === 'irs') setTimeout(() => { if (S.tab === 'skt') irsaliyeEkle(); }, 150);
@@ -258,6 +266,10 @@ function render() {
   if (!S.meYuklendi) { app.innerHTML = `<div class="empty"><b>Yükleniyor…</b></div>`; $('#tabs').hidden = true; return; }
   if (!S.me) return hesapYok();
   if (S.me.aktif === false) { app.innerHTML = `<div class="login"><div class="card p"><h3>Hesap kapalı</h3><p class="note">Bu hesap devre dışı bırakılmış.</p><div class="btns"><button class="btn alt" id="cik">Çıkış</button></div></div></div>`; $('#cik').onclick = () => signOut(auth); $('#tabs').hidden = true; return; }
+  if (S.gor && !S.git && S.me && S.urunYuklendi && S.subeId && (!S.gor.sube || S.subeler[S.gor.sube])) gorunumGeriYukle();
+  if (!S.gor && !S.git && S.me && S.urunYuklendi && S.subeId) S.gorYuklendi = true;
+  if (S.gorSy && syBul(S.gorSy)) { S.syId = S.gorSy; S.gorSy = null; }
+  if (S.gorYuklendi) { try { sessionStorage.setItem('env_gor', JSON.stringify({ tab: S.tab, ar: S.ar === 'irs' ? null : S.ar, syId: S.syId, sonucId: S.sonucId, sube: S.subeId })); } catch (e) { } }
   if (S.git && S.me && S.urunYuklendi && subeIds().length && (!S.git.sube || S.subeler[S.git.sube])) gitUygula();
   if (!admin() && !S.subeSecildi && S.subelerYuklendi && subeIds().length > 1) return subeSecimEkrani();
   if (S.syId) return editor();
