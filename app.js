@@ -602,7 +602,7 @@ document.addEventListener('pointerdown', e => { const td = e.target.closest && e
 document.addEventListener('copy', e => {
   const t = document.querySelector('table.st'); const sel = window.getSelection(); if (!t || !sonucKopya || !sel.rangeCount || sel.isCollapsed || !t.contains(sel.anchorNode)) return;
   const sat = [...t.querySelectorAll('tr[data-u]')].filter(r => sel.containsNode(r, true)); if (!sat.length) return;
-  const ad = r => S.urunler[r.dataset.u]?.ad || '', say = r => { const x = sonucKopya[r.dataset.u]; return x && x.say ? String(r6(x.t)).replace('.', ',') : ''; };
+  const ad = r => S.urunler[r.dataset.u]?.ad || '', say = r => { const x = sonucKopya[r.dataset.u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; };
   const m = t.classList.contains('selAd') ? 'ad' : t.classList.contains('selSay') ? 'say' : 'ikisi';
   e.clipboardData.setData('text/plain', sat.map(r => m === 'ad' ? ad(r) : m === 'say' ? say(r) : ad(r) + '\t' + say(r)).join('\n')); e.preventDefault();
 });
@@ -629,7 +629,7 @@ function sonucEkrani() {
   // Excel'e yapıştırmak için: her satır bir ürün; sayılar virgüllü (Excel Türkçe), sayılmayan ürün boş satır
   const kopya = async (satirlar, ad) => { const t = satirlar.join('\n'); try { await navigator.clipboard.writeText(t); } catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); } toast(`${ad} kopyalandı (${satirlar.length} satır). Excel'de yapıştırın.`); };
   $('#kpAd').onclick = () => kopya(sira.map(u => S.urunler[u].ad), 'Ürün adları');
-  $('#kpSay').onclick = () => kopya(sira.map(u => { const x = tp[u]; return x && x.say ? String(r6(x.t)).replace('.', ',') : ''; }), 'Rakamlar');
+  $('#kpSay').onclick = () => kopya(sira.map(u => { const x = tp[u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; }), 'Rakamlar');
   const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; S.ar = null; gecmis.length = 0; S.sayimlar = S.sayimlar.filter(x => x.id !== sy.id); render(); };
 }
 async function sonucResmi(sy, sb, sira, disarida, tp) {
