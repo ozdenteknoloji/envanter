@@ -611,10 +611,15 @@ function sonucEkrani() {
     <div class="card">
     <table class="st">${sira.map((u, i) => satir(u, i + 1)).join('')}
     ${disarida.length ? `<tr class="dv"><td colspan="4">Sonuç listesinde olmayanlar</td></tr>` + disarida.map(u => satir(u, '·')).join('') : ''}</table></div>
+    <div class="btns"><button class="btn alt" id="kpAd">Ürün adlarını kopyala</button><button class="btn alt" id="kpSay">Rakamları kopyala</button></div>
     <div class="btns"><button class="btn alt" id="paylas">Resim olarak paylaş</button></div>
     <div class="btns">${admin() ? '<button class="btn red" id="sySil">Sayımı sil</button>' : ''}</div></div>`;
   bagla();
   $('#paylas').onclick = () => sonucResmi(sy, sb, sira, disarida, tp);
+  // Excel'e yapıştırmak için: her satır bir ürün; sayılar virgüllü (Excel Türkçe), sayılmayan ürün boş satır
+  const kopya = async (satirlar, ad) => { const t = satirlar.join('\n'); try { await navigator.clipboard.writeText(t); } catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); } toast(`${ad} kopyalandı (${satirlar.length} satır). Excel'de yapıştırın.`); };
+  $('#kpAd').onclick = () => kopya(sira.map(u => S.urunler[u].ad), 'Ürün adları');
+  $('#kpSay').onclick = () => kopya(sira.map(u => { const x = tp[u]; return x && x.say ? String(r6(x.t)).replace('.', ',') : ''; }), 'Rakamlar');
   const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; S.ar = null; gecmis.length = 0; S.sayimlar = S.sayimlar.filter(x => x.id !== sy.id); render(); };
 }
 async function sonucResmi(sy, sb, sira, disarida, tp) {
