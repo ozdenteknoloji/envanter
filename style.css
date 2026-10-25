@@ -155,3 +155,7 @@ body.editing .toast{bottom:auto;top:calc(128px + env(safe-area-inset-top))}
 .fh button.on{background:var(--blue-soft);color:var(--blue);border-color:var(--blue)}
 .fpop{position:fixed;z-index:60;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px;min-width:150px}
 .fpop button{display:flex;justify-content:space-between;width:100%;border:0;background:none;padding:9px 12px;font-size:14px;font-weight:600;color:var(--text,inherit);text-align:left;border-radius:7px}.fpop button.on{color:var(--blue)}.fpop small{color:var(--mut);margin-left:14px}
+
+/* Sonuç tablosu: sütun bazlı seçim (diğer sütun seçilmez) */
+.st.selAd td:not(:nth-child(2)){user-select:none;-webkit-user-select:none}
+.st.selSay td:not(.v){user-select:none;-webkit-user-select:none}

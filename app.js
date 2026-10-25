@@ -596,12 +596,22 @@ document.addEventListener('keydown', e => {
 });
 
 /* ================= Sonuç ================= */
+// Sonuç tablosunda seçerek kopyalama: ürün adı sütunundan başlayan seçim sadece adları, rakam sütunundan başlayan sadece rakamları alır
+let sonucKopya = null;
+document.addEventListener('pointerdown', e => { const td = e.target.closest && e.target.closest('.st td'); const t = td && td.closest('table'); if (!t) return; t.classList.toggle('selAd', td.cellIndex === 1); t.classList.toggle('selSay', td.cellIndex === 2); });
+document.addEventListener('copy', e => {
+  const t = document.querySelector('table.st'); const sel = window.getSelection(); if (!t || !sonucKopya || !sel.rangeCount || sel.isCollapsed || !t.contains(sel.anchorNode)) return;
+  const sat = [...t.querySelectorAll('tr[data-u]')].filter(r => sel.containsNode(r, true)); if (!sat.length) return;
+  const ad = r => S.urunler[r.dataset.u]?.ad || '', say = r => { const x = sonucKopya[r.dataset.u]; return x && x.say ? String(r6(x.t)).replace('.', ',') : ''; };
+  const m = t.classList.contains('selAd') ? 'ad' : t.classList.contains('selSay') ? 'say' : 'ikisi';
+  e.clipboardData.setData('text/plain', sat.map(r => m === 'ad' ? ad(r) : m === 'say' ? say(r) : ad(r) + '\t' + say(r)).join('\n')); e.preventDefault();
+});
 function sonucEkrani() {
   const sb = sube();
   const liste = S.sayimlar; if (!S.sonucId || !syBul(S.sonucId)) S.sonucId = liste[0]?.id || null; const secim = '';
   const sy = syBul(S.sonucId);
   if (!sy) { $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true }) + `<div class="empty"><b>Sayım yok</b>Önce Sayım sekmesinden bir sayım başlatın.</div>`; bagla(); return; }
-  const tp = urunToplamlari(sy, sb); const sira = sonucListesi(sb).filter(u => tp[u]);
+  const tp = urunToplamlari(sy, sb); const sira = sonucListesi(sb).filter(u => tp[u]); sonucKopya = tp;
   const disarida = [];
 
   const satir = (u, no) => { const x = tp[u]; const ur = S.urunler[u]; 
