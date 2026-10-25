@@ -159,3 +159,6 @@ body.editing .toast{bottom:auto;top:calc(128px + env(safe-area-inset-top))}
 /* Sonuç tablosu: sütun bazlı seçim (diğer sütun seçilmez) */
 .st.selAd td:not(:nth-child(2)){user-select:none;-webkit-user-select:none}
 .st.selSay td:not(.v){user-select:none;-webkit-user-select:none}
+
+/* Şube seçim ekranı: dikey ortala */
+.login.orta{margin-top:0;min-height:calc(100vh - 40px);min-height:calc(100dvh - 40px);display:flex;flex-direction:column;justify-content:center}

@@ -87,7 +87,8 @@ function baglan() {
     if (!S.unsub.kul) S.unsub.kul = onSnapshot(collection(db, 'kullanicilar'), s => { S.kullanicilar = s.docs.map(d => ({ uid: d.id, ...d.data() })); render(); }, hata);
   } else {
     S.subeler = {};
-    for (const id of S.me.subeler || []) S.unsub['sb:' + id] = onSnapshot(doc(db, 'subeler', id), s => { if (s.exists()) S.subeler[id] = s.data(); else delete S.subeler[id]; subeSec(); render(); }, hata);
+    const gelen = new Set(); const toplam = (S.me.subeler || []).length;
+    for (const id of S.me.subeler || []) S.unsub['sb:' + id] = onSnapshot(doc(db, 'subeler', id), s => { if (s.exists()) S.subeler[id] = s.data(); else delete S.subeler[id]; gelen.add(id); if (gelen.size >= toplam) S.subelerYuklendi = true; subeSec(); render(); }, hata);
   }
   render();
 }
@@ -305,7 +306,7 @@ function bagla() {
 window.addEventListener('online', () => render()); window.addEventListener('offline', () => render());
 function subeSecimEkrani() {
   $('#tabs').hidden = true;
-  $('#app').innerHTML = `<div class="login"><div class="card p"><h3>Hangi şubede sayım yapmak istiyorsun?</h3><p class="note" style="margin:4px 0 10px">${esc(S.me?.ad || '')}, birden fazla şubeye bakıyorsun. Şubeyi seç, o şubenin menüsü açılsın.</p>
+  $('#app').innerHTML = `<div class="login orta"><div class="card p"><h3>Hangi şubede sayım yapmak istiyorsun?</h3><p class="note" style="margin:4px 0 10px">${esc(S.me?.ad || '')}, birden fazla şubeye bakıyorsun. Şubeyi seç, o şubenin menüsü açılsın.</p>
     <div class="card" style="margin-top:6px">${subeIds().map(id => `<button class="row" data-id="${id}"><div class="m"><b>${esc(S.subeler[id].ad)}</b></div><span class="ch">›</span></button>`).join('')}</div>
     <div class="btns"><button class="btn alt" id="cik">Çıkış</button></div></div></div>`;
   $('#app').querySelectorAll('[data-id]').forEach(b => b.onclick = () => { S.subeSecildi = true; S.tab = 'sayim'; S.ar = null; S.syId = null; subeSec(b.dataset.id); render(); });
@@ -625,14 +626,14 @@ function sonucEkrani() {
   const sb = sube();
   const liste = S.sayimlar; if (!S.sonucId || !syBul(S.sonucId)) S.sonucId = liste[0]?.id || null; const secim = '';
   const sy = syBul(S.sonucId);
-  if (!sy) { $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true }) + `<div class="empty"><b>Sayım yok</b>Önce Sayım sekmesinden bir sayım başlatın.</div>`; bagla(); return; }
+  if (!sy) { $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, subeSecici: false }) + `<div class="empty"><b>Sayım yok</b>Önce Sayım sekmesinden bir sayım başlatın.</div>`; bagla(); return; }
   const tp = urunToplamlari(sy, sb); const sira = sonucListesi(sb).filter(u => tp[u]); sonucKopya = tp;
   const disarida = [];
 
   const satir = (u, no) => { const x = tp[u]; const ur = S.urunler[u]; 
     return `<tr data-u="${u}"><td class="no">${no}</td><td>${esc(ur.ad)}${!x || !x.say ? `<span class="uns">sayılmadı</span>` : ''}${sktEtiket(u, sy)}</td><td class="v">${fmt(x ? x.t : 0, ur.birim)}<small>${ur.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`; };
   const ilr = ilerleme(sy, sb);
-  $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
+  $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, subeSecici: false, alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
     <div class="card">
     <table class="st">${sira.map((u, i) => satir(u, i + 1)).join('')}
     ${disarida.length ? `<tr class="dv"><td colspan="4">Sonuç listesinde olmayanlar</td></tr>` + disarida.map(u => satir(u, '·')).join('') : ''}</table></div>
