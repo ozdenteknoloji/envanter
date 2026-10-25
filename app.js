@@ -331,11 +331,10 @@ function hesapPaneli() {
     <div class="sec">Bildirimler</div>
     <p class="note">Sabah 10:30'da SKT özeti, akşam 22:00'de unutulan irsaliye hatırlatması. iPhone'da önce uygulamayı ana ekrana ekleyin.</p>
     <div id="bdM" class="note"></div>
-    <div class="btns"><button class="btn alt" id="bdAc">🔔 Bu telefonda bildirimleri aç</button><button class="btn alt" id="bdTest">Deneme bildirimi iste</button></div>
+    <div class="btns"><button class="btn alt" id="bdAc">🔔 Bu telefonda bildirimleri aç</button></div>
     <div class="btns"><button class="btn red" id="cik">Çıkış yap</button></div>`, el => {
     el.querySelector('#cik').onclick = () => { closeSheet(); signOut(auth); };
     el.querySelector('#bdAc').onclick = () => bildirimAc(el.querySelector('#bdM'));
-    el.querySelector('#bdTest').onclick = () => bildirimAc(el.querySelector('#bdM'), true);
     el.querySelector('#sKay').onclick = async () => {
       const a = el.querySelector('#s0').value, b = el.querySelector('#s1').value; const er = el.querySelector('#se');
       if (b.length < 6) { er.textContent = 'Yeni şifre en az 6 karakter olmalı.'; return; }
