@@ -335,6 +335,8 @@ async function bildirimAc(msg, deneme) {
   } catch (e) { yaz('Hata: ' + (e.message || e)); }
 }
 const serverNow = () => new Date().toISOString();
+// Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
+const SURUM = 'v1';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -346,7 +348,8 @@ function hesapPaneli() {
     <p class="note">Sabah 10:30'da SKT özeti, akşam 22:00'de unutulan irsaliye hatırlatması. iPhone'da önce uygulamayı ana ekrana ekleyin.</p>
     <div id="bdM" class="note"></div>
     <div class="btns"><button class="btn alt" id="bdAc">🔔 Bu telefonda bildirimleri aç</button></div>
-    <div class="btns"><button class="btn red" id="cik">Çıkış yap</button></div>`, el => {
+    <div class="btns"><button class="btn red" id="cik">Çıkış yap</button></div>
+    <p class="note" style="text-align:center;margin:10px 0 0;font-size:12px">Sürüm ${SURUM}</p>`, el => {
     el.querySelector('#cik').onclick = () => { closeSheet(); signOut(auth); };
     el.querySelector('#bdAc').onclick = () => bildirimAc(el.querySelector('#bdM'));
     el.querySelector('#sKay').onclick = async () => {
