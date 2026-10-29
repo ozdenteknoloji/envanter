@@ -381,7 +381,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v11';
+const SURUM = 'v12';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -1002,7 +1002,7 @@ const BUFFLAR = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 const buffListe = () => { const l = S.ayar && Array.isArray(S.ayar.buff) ? S.ayar.buff.map(Number).filter(n => isFinite(n) && n >= 0 && n <= 20) : []; return [...new Set(l.length ? l : BUFFLAR)].sort((a, b) => a - b); };
 // Takvimdeki bir sonraki sipariş günleri (bugün dahil)
 function siparisGunleri(sb) {
-  const t = sb.takvim || []; const bg = bugun(); const out = [];
+  const t = sb.takvim || []; const bg = isGunu(); const out = []; // iş günü: sabah 06:00'a kadar bir önceki gün sayılır (gece verilen sipariş sabaha kadar görünür)
   for (let i = 0; i < 8; i++) { const d = gunEkle(bg, i); const k = t.find(x => x.gun === haftaGunu(d)); if (k) out.push({ tarih: d, sure: k.sure }); }
   return out;
 }
