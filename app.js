@@ -337,7 +337,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v9';
+const SURUM = 'v10';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -893,6 +893,22 @@ function irsaliyeDuzen() {
       toast('İrsaliye kaydedildi.'); S.irsTaslak = null; geri(); } catch (e) { hata(e); }
   };
 }
+// Ana malzeme ek buffı: Ayarlar → Sistem ayarları → Ana malzeme buffı (genel/ayar: anaBuff gün, anaUrunler ürün id'leri)
+const anaMiktar = () => { const n = parseFloat(S.ayar && S.ayar.anaBuff); return isFinite(n) && n > 0 ? n : 0; };
+const anaMi = u => !!(S.ayar && Array.isArray(S.ayar.anaUrunler) && S.ayar.anaUrunler.includes(u));
+function anaMalzemeAyar() {
+  const l = Object.entries(S.urunler).filter(([id, x]) => x.siparis && x.aktif !== false).sort((a, b) => (a[1].sira ?? 999) - (b[1].sira ?? 999));
+  const sec = new Set((S.ayar.anaUrunler || []).filter(id => S.urunler[id])); const eskiY = window.scrollY;
+  $('#app').innerHTML = ust('Ana malzeme buffı', { geri: true, subeSecici: false, alt: `${sec.size} ana malzeme · ek ${yaz(anaMiktar()) || 0} gün` }) + `<div class="pad">
+    <p class="note" style="margin:0 0 8px">İşaretli ürünlerde sipariş hedefi, seçtiğiniz buffa <b>ek olarak</b> bu kadar gün fazla hesaplanır (ör. buff 0,5 + ek 0,25 = 0,75 gün). Sipariş ekranında ayrı bir etiket çıkmaz. SKT'si kısa ürünlerde küçük tutun; 0 yazarsanız kapanır.</p>
+    <label class="field"><span>Ek buff (gün)</span><input id="abM" inputmode="decimal" value="${yaz(anaMiktar())}" placeholder="0"></label><div class="err" id="abH"></div>
+    <div class="card">${l.map(([id, x]) => `<button class="row" data-ab="${id}"><div class="m"><b>${esc(x.ad)}</b></div><span class="ch" style="color:var(--blue);font-weight:800;font-size:18px">${sec.has(id) ? '✓' : ''}</span></button>`).join('') || '<div class="empty" style="padding:20px">Sipariş listesinde ürün yok.</div>'}</div></div>`;
+  bagla(); window.scrollTo(0, eskiY);
+  $('#abM').onchange = async e => { const v = sayiOku(e.target.value) ?? 0; const h = $('#abH'); if (v < 0 || v > 5) { h.textContent = '0 ile 5 gün arasında bir değer yazın.'; return; } h.textContent = '';
+    S.ayar = { ...S.ayar, anaBuff: v }; try { await setDoc(doc(db, 'genel', 'ayar'), { anaBuff: v }, { merge: true }); toast(v ? `Ek buff ${yaz(v)} gün.` : 'Ek buff kapatıldı.'); render(); } catch (er) { hata(er); } };
+  $('#app').querySelectorAll('[data-ab]').forEach(b => b.onclick = async () => { const id = b.dataset.ab; if (sec.has(id)) sec.delete(id); else sec.add(id); const arr = [...sec];
+    S.ayar = { ...S.ayar, anaUrunler: arr }; render(); try { await setDoc(doc(db, 'genel', 'ayar'), { anaUrunler: arr }, { merge: true }); } catch (er) { hata(er); } });
+}
 function buffPanel() {
   const sec = new Set(buffListe()); const aday = new Set([...BUFFLAR, ...sec]);
   openSheet(`<h2>Buff seçenekleri</h2><p class="note">Sipariş ekranındaki buff listesinde hangi değerler (gün) çıksın? Dokunarak ekleyin ya da çıkarın. Listede olmayan bir değer isterseniz aşağıdan yazıp ekleyin.</p>
@@ -955,7 +971,7 @@ function siparisEkrani() {
   const T = S.spTaslak; const buff = T.buff;
   const urs = siparisListesi(sb);
   const satir = u => { const x = S.urunler[u]; const ideal = T.ideal[u]; const sonEl = eldeBul(u); const elElle = !sayimdaMi(sb, u, 'gunluk'); const ov = elElle ? T.elde[u] : null; const el = ov != null ? { t: ov } : sonEl; const kBos = !(x.sKoli > 0); const k = kBos ? null : x.sKoli;
-    const hedef = ideal != null ? r6(ideal / D * (D + buff)) : null; const koli = hedef != null && el && k ? r6((hedef - el.t) / k) : null; const oneri = koli != null ? Math.max(0, Math.ceil(koli)) : '';
+    const hedef = ideal != null ? r6(ideal / D * (D + buff + (anaMi(u) ? anaMiktar() : 0))) : null; const koli = hedef != null && el && k ? r6((hedef - el.t) / k) : null; const oneri = koli != null ? Math.max(0, Math.ceil(koli)) : '';
     const n = v => v == null ? '–' : fmt(v, x.birim === 'adet' ? 'adet' : 'kg');
     return `<tr><td style="text-align:left;font-weight:600;font-size:12.5px">${esc(x.ad)}<div class="note" style="margin:0;font-size:10.5px">${kBos ? '<b style="color:var(--amber)">koli boş!</b>' : 'koli ' + yaz(k)}</div></td>
       <td><input class="spI" data-u="${u}" inputmode="decimal" enterkeyhint="next" value="${yaz(ideal)}" style="width:62px"></td>
@@ -971,7 +987,7 @@ function siparisEkrani() {
     ${(() => { const bos = urs.filter(u => !(S.urunler[u].sKoli > 0)); return bos.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${bos.length} üründe sipariş kolisi boş</b><p class="note">${bos.map(u => esc(urunAd(u))).join(', ')}. Bu ürünlerde koli önerisi hesaplanmaz, yanlış sipariş vermemek için ${admin() ? 'Ayarlar → Ürünler\'den "Sipariş kolisi"ni doldurun.' : 'yöneticiye haber verin.'}</p></div>` : ''; })()}
     ${eskiSayim ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${son ? `Son sayım ${trTarih(son.tarih)}.` : 'Sayım yok.'}</b><p class="note">Siparişten önce bugünün günlük sayımını yapın; "Elde" sütunu son sayımdan gelir.</p></div>` : ''}
     <div class="card" style="overflow-x:auto"><table class="st spT"><tr style="font-size:10px;color:var(--mut);text-transform:uppercase;font-weight:800"><td style="text-align:left">Ürün <button id="spSira" title="Sipariş sırasını düzenle" style="border:0;background:none;font-size:14px;padding:0 4px;color:var(--blue)">✎</button></td><td>İdeal <button id="spYap" title="Excel'den toplu yapıştır" style="border:0;background:none;font-size:13px;padding:0 3px">📋</button><button id="spSif" title="Sıfırla" style="border:0;background:none;font-size:14px;padding:0 3px;color:var(--red)">↺</button></td><td>Hedef</td><td>Elde</td><td>Koli</td><td>Liste</td></tr>${urs.length ? (() => { const el = urs.filter(u => !sayimdaMi(sb, u, 'gunluk')); const son = el[el.length - 1]; return urs.map(u => satir(u) + (u === son ? `<tr><td colspan="6" style="text-align:left;font-size:11px;color:var(--amber);line-height:1.35;padding:6px 8px">☝ Bu ürünler günlük sayımda sayılmaz. <b>Elde</b> miktarını elle yazın; boş bırakırsanız son sayımdaki${(() => { const e = eldeBul(u); return e ? ` (${trTarih(e.sy.tarih)})` : ''; })()} miktar kullanılır.</td></tr>` : '')).join(''); })() : '<tr><td colspan="6"><div class="empty" style="padding:16px">Sipariş listesinde ürün yok. Ayarlar → Ürünler listesinde "Sipariş" işaretleyin.</div></td></tr>'}</table></div>
-    <p class="note">Koli = (ideal ÷ ${D} × (${D} + buff) − elde) ÷ sipariş kolisi. Liste'yi siz yazarsınız; boş bırakılan satırda soluk rakam öneridir. Günlük sayımda sayılmayan ürünlerde (örn. pizza kutuları) <b>Elde</b>'yi elle yazabilirsiniz; boş bırakırsanız son sayım kullanılır.</p>
+    <p class="note">Koli = (ideal ÷ ${D} × (${D} + buff${anaMiktar() ? ' + ana malzemelerde ek buff' : ''}) − elde) ÷ sipariş kolisi. Liste'yi siz yazarsınız; boş bırakılan satırda soluk rakam öneridir. Günlük sayımda sayılmayan ürünlerde (örn. pizza kutuları) <b>Elde</b>'yi elle yazabilirsiniz; boş bırakırsanız son sayım kullanılır.</p>
     <label class="field"><span>Not (alacak / borç vb.)</span><input id="spN" value="${esc(T.not)}"></label>
     <div class="btns"><button class="btn" id="spP">Listeyi paylaş</button></div>
     <p class="note" style="text-align:center">${kayit.zaman ? `Kaydedildi · ${esc(kayit.kim || '')} ${saat(kayit.zaman)}` : 'Yazdıkça kaydedilir.'}</p></div>`;
@@ -1053,6 +1069,7 @@ function ayarlar() {
   if (sayfa === 'kullanicilar') return kullanicilarAyar();
   if (sayfa === 'subeler') return subelerAyar();
   if (sayfa === 'sistem') return sistemAyar();
+  if (sayfa === 'anamalzeme') return anaMalzemeAyar();
   const ids = Object.keys(S.subeler).sort((a, b) => S.subeler[a].ad.localeCompare(S.subeler[b].ad, 'tr'));
   const urunSay = Object.keys(S.urunler).length;
   const adlar = ids.slice(0, 3).map(id => S.subeler[id].ad).join(', ') + (ids.length > 3 ? '…' : '');
@@ -1080,9 +1097,10 @@ function sistemAyar() {
       <button class="row" id="gAi"><div class="m"><b>Fotoğraf okuma (Gemini)</b><span>${S.ai.geminiKey ? 'Anahtar girildi · irsaliye fotoğrafları okunur' : 'Anahtar girilmedi · irsaliye sadece elle girilir'}</span></div><span class="ch">›</span></button>
       <button class="row" id="gIrs"><div class="m"><b>Saklanacak irsaliye</b><span>Her şubede son ${irsSakla()} irsaliye saklanır · SKT hesabı bunlara bakar</span></div><span class="ch">›</span></button>
       <button class="row" id="gBuff"><div class="m"><b>Buff seçenekleri</b><span>${buffListe().map(yaz).join(' · ')}</span></div><span class="ch">›</span></button>
+      <button class="row" id="gAna"><div class="m"><b>Ana malzeme buffı</b><span>${(() => { const n = (S.ayar.anaUrunler || []).filter(id => S.urunler[id]).length; return n && anaMiktar() ? `${n} ürün · buffa ek ${yaz(anaMiktar())} gün` : 'Kapalı · hamur, mozzarella gibi ürünlere ek pay'; })()}</span></div><span class="ch">›</span></button>
       <button class="row" id="seed2"><div class="m"><b>Excel'den ürün yükle</b><span>Serik Excel'indeki ürünler · olanlara dokunulmaz, eksikler eklenir</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
-  $('#gAi').onclick = aiPanel; $('#gIrs').onclick = irsSaklaPanel; $('#gBuff').onclick = buffPanel; $('#seed2').onclick = seedYukle;
+  $('#gAi').onclick = aiPanel; $('#gIrs').onclick = irsSaklaPanel; $('#gBuff').onclick = buffPanel; $('#gAna').onclick = () => go({ ar: 'anamalzeme' }); $('#seed2').onclick = seedYukle;
 }
 async function seedYukle() {
   const { SEED } = await import('./seed.js?v=11');
