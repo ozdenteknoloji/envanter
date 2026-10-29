@@ -337,7 +337,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v5';
+const SURUM = 'v6';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -1036,22 +1036,37 @@ function ayarlar() {
   if (sayfa === 'yerler') return yerlerAyar(a1);
   if (sayfa === 'urunler') return urunlerAyar();
   if (sayfa === 'kullanicilar') return kullanicilarAyar();
+  if (sayfa === 'subeler') return subelerAyar();
+  if (sayfa === 'sistem') return sistemAyar();
   const ids = Object.keys(S.subeler).sort((a, b) => S.subeler[a].ad.localeCompare(S.subeler[b].ad, 'tr'));
   const urunSay = Object.keys(S.urunler).length;
+  const adlar = ids.slice(0, 3).map(id => S.subeler[id].ad).join(', ') + (ids.length > 3 ? '…' : '');
   $('#app').innerHTML = ust('Ayarlar', { subeSecici: false }) + `<div class="pad">
     ${!urunSay ? `<div class="card p"><h3>Başlangıç verisi</h3><p class="note">Serik Excel'indeki 105 ürün, Serik şubesinin 6 konumu ve sonuç sırası yüklenir. Sonra her şeyi buradan düzenleyebilirsiniz.</p><div class="btns"><button class="btn" id="seed">Serik Excel verisini yükle</button></div></div>` : ''}
-    <div class="sec">Şubeler (${ids.length})</div><div class="card">${ids.map(id => { const s = S.subeler[id]; const n = (s.konumlar || []).reduce((t, k) => t + (k.satirlar || []).length, 0); return `<button class="row" data-sb="${id}"><div class="m"><b>${esc(s.ad)}${s.aktif === false ? ' <span class="tag">Kapalı</span>' : ''}</b><span>${(s.konumlar || []).length} konum · ${n} satır · haftalık sayım ${GUNU[s.haftalikGun ?? 6]}</span></div><span class="ch">›</span></button>`; }).join('')}
-      <button class="row" id="yeniSube"><div class="m"><b style="color:var(--blue)">+ Yeni şube</b></div></button></div>
-    <div class="sec">Bütün şubeler için ortak</div><div class="card">
+    <div class="card">
+      <button class="row" id="gSub"><div class="m"><b>Şubeler</b><span>${ids.length} şube${adlar ? ' · ' + esc(adlar) : ''}</span></div><span class="ch">›</span></button>
+      <button class="row" id="gKul"><div class="m"><b>Kullanıcılar</b><span>${S.kullanicilar.length} hesap</span></div><span class="ch">›</span></button>
       <button class="row" id="gUrun"><div class="m"><b>Ürünler</b><span>${urunSay} ürün · koli içi, SKT ve çözülme günleri</span></div><span class="ch">›</span></button>
-      <button class="row" id="seed2"><div class="m"><b>Excel'den ürün yükle</b><span>Serik Excel'indeki ürünler · olanlara dokunulmaz, eksikler eklenir</span></div><span class="ch">›</span></button>
+      <button class="row" id="gSis"><div class="m"><b>Sistem ayarları</b><span>Fotoğraf okuma, saklanacak irsaliye, ürün yükleme</span></div><span class="ch">›</span></button></div></div>`;
+  bagla();
+  const sd = $('#seed'); if (sd) sd.onclick = seedYukle;
+  $('#gSub').onclick = () => go({ ar: 'subeler' }); $('#gKul').onclick = () => go({ ar: 'kullanicilar' }); $('#gSis').onclick = () => go({ ar: 'sistem' });
+  $('#gUrun').onclick = () => { S.urunAra = ''; S.urunFg = S.urunFs = 'hepsi'; go({ ar: 'urunler' }); };
+}
+function subelerAyar() {
+  const ids = Object.keys(S.subeler).sort((a, b) => S.subeler[a].ad.localeCompare(S.subeler[b].ad, 'tr'));
+  $('#app').innerHTML = ust('Şubeler', { geri: true, subeSecici: false, alt: `${ids.length} şube` }) + `<div class="pad"><div class="card">${ids.map(id => { const s = S.subeler[id]; const n = (s.konumlar || []).reduce((t, k) => t + (k.satirlar || []).length, 0); return `<button class="row" data-sb="${id}"><div class="m"><b>${esc(s.ad)}${s.aktif === false ? ' <span class="tag">Kapalı</span>' : ''}</b><span>${(s.konumlar || []).length} konum · ${n} satır · haftalık sayım ${GUNU[s.haftalikGun ?? 6]}</span></div><span class="ch">›</span></button>`; }).join('')}
+    <button class="row" id="yeniSube"><div class="m"><b style="color:var(--blue)">+ Yeni şube</b></div></button></div></div>`;
+  bagla();
+  $('#app').querySelectorAll('[data-sb]').forEach(b => b.onclick = () => go({ ar: 'sube:' + b.dataset.sb })); $('#yeniSube').onclick = yeniSube;
+}
+function sistemAyar() {
+  $('#app').innerHTML = ust('Sistem ayarları', { geri: true, subeSecici: false }) + `<div class="pad"><div class="card">
       <button class="row" id="gAi"><div class="m"><b>Fotoğraf okuma (Gemini)</b><span>${S.ai.geminiKey ? 'Anahtar girildi · irsaliye fotoğrafları okunur' : 'Anahtar girilmedi · irsaliye sadece elle girilir'}</span></div><span class="ch">›</span></button>
       <button class="row" id="gIrs"><div class="m"><b>Saklanacak irsaliye</b><span>Her şubede son ${irsSakla()} irsaliye saklanır · SKT hesabı bunlara bakar</span></div><span class="ch">›</span></button>
-      <button class="row" id="gKul"><div class="m"><b>Kullanıcılar</b><span>${S.kullanicilar.length} hesap</span></div><span class="ch">›</span></button></div></div>`;
+      <button class="row" id="seed2"><div class="m"><b>Excel'den ürün yükle</b><span>Serik Excel'indeki ürünler · olanlara dokunulmaz, eksikler eklenir</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
-  const sd = $('#seed'); if (sd) sd.onclick = seedYukle; $('#seed2').onclick = seedYukle;
-  $('#app').querySelectorAll('[data-sb]').forEach(b => b.onclick = () => go({ ar: 'sube:' + b.dataset.sb }));
-  $('#gIrs').onclick = irsSaklaPanel; $('#gAi').onclick = aiPanel; $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => { S.urunAra = ''; S.urunFg = S.urunFs = 'hepsi'; go({ ar: 'urunler' }); }; $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
+  $('#gAi').onclick = aiPanel; $('#gIrs').onclick = irsSaklaPanel; $('#seed2').onclick = seedYukle;
 }
 async function seedYukle() {
   const { SEED } = await import('./seed.js?v=11');
