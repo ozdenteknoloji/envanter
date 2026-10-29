@@ -336,7 +336,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v1';
+const SURUM = 'v2';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -630,15 +630,17 @@ function sonucEkrani() {
   const liste = S.sayimlar; if (!S.sonucId || !syBul(S.sonucId)) S.sonucId = liste[0]?.id || null; const secim = '';
   const sy = syBul(S.sonucId);
   if (!sy) { $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, subeSecici: false }) + `<div class="empty"><b>Sayım yok</b>Önce Sayım sekmesinden bir sayım başlatın.</div>`; bagla(); return; }
-  const tp = urunToplamlari(sy, sb); const sira = sonucSatirlari(sb).filter(u => pulseMi(u) || tp[u]); sonucKopya = tp;
+  const tp = urunToplamlari(sy, sb); const tumu = sonucSatirlari(sb).filter(u => grupMi(u) || pulseMi(u) || tp[u]);
+  const sira = tumu.filter((u, i) => !grupMi(u) || (i + 1 < tumu.length && !grupMi(tumu[i + 1]))); // altında satır olmayan başlık gizlenir
+  const urunSira = sira.filter(u => !grupMi(u)); sonucKopya = tp; let no = 0;
   const disarida = [];
 
-  const satir = (u, no) => { if (pulseMi(u)) return `<tr data-u="${u}" class="pls"><td class="no">${no}</td><td>${esc(satirAd(sb, u))}<span class="uns">Pulse'a 0 gir</span></td><td class="v">0</td></tr>`; const x = tp[u]; const ur = S.urunler[u]; 
+  const satir = (u, no) => { if (grupMi(u)) return `<tr class="dv"><td colspan="3">${esc(GRUP_AD[u])}</td></tr>`; if (pulseMi(u)) return `<tr data-u="${u}" class="pls"><td class="no">${no}</td><td>${esc(satirAd(sb, u))}<span class="uns">Pulse'a 0 gir</span></td><td class="v">0</td></tr>`; const x = tp[u]; const ur = S.urunler[u]; 
     return `<tr data-u="${u}"><td class="no">${no}</td><td>${esc(ur.ad)}${!x || !x.say ? `<span class="uns">sayılmadı</span>` : ''}${sktEtiket(u, sy)}</td><td class="v">${fmt(x ? x.t : 0, ur.birim)}<small>${ur.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`; };
   const ilr = ilerleme(sy, sb);
   $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, subeSecici: false, alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
     <div class="card">
-    <table class="st">${sira.map((u, i) => satir(u, i + 1)).join('')}
+    <table class="st">${sira.map(u => satir(u, grupMi(u) ? '' : ++no)).join('')}
     ${disarida.length ? `<tr class="dv"><td colspan="4">Sonuç listesinde olmayanlar</td></tr>` + disarida.map(u => satir(u, '·')).join('') : ''}</table></div>
     <div class="btns"><button class="btn alt" id="kpAd">Ürün adlarını kopyala</button><button class="btn alt" id="kpSay">Rakamları kopyala</button></div>
     <div class="btns"><button class="btn alt" id="paylas">Resim olarak paylaş</button></div>
@@ -647,18 +649,18 @@ function sonucEkrani() {
   $('#paylas').onclick = () => sonucResmi(sy, sb, sira, disarida, tp);
   // Excel'e yapıştırmak için: her satır bir ürün; sayılar virgüllü (Excel Türkçe), sayılmayan ürün boş satır
   const kopya = async (satirlar, ad) => { const t = satirlar.join('\n'); try { await navigator.clipboard.writeText(t); } catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); } toast(`${ad} kopyalandı (${satirlar.length} satır). Excel'de yapıştırın.`); };
-  $('#kpAd').onclick = () => kopya(sira.map(u => satirAd(sb, u)), 'Ürün adları');
-  $('#kpSay').onclick = () => kopya(sira.map(u => { if (pulseMi(u)) return '0'; const x = tp[u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; }), 'Rakamlar');
+  $('#kpAd').onclick = () => kopya(urunSira.map(u => satirAd(sb, u)), 'Ürün adları');
+  $('#kpSay').onclick = () => kopya(urunSira.map(u => { if (pulseMi(u)) return '0'; const x = tp[u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; }), 'Rakamlar');
   const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; S.ar = null; gecmis.length = 0; S.sayimlar = S.sayimlar.filter(x => x.id !== sy.id); render(); };
 }
 async function sonucResmi(sy, sb, sira, disarida, tp) {
-  const rows = [...sira, ...disarida]; const W = 900, RH = 40, H = 150 + rows.length * RH + 40; const sc = 2;
+  const rows = [...sira, ...disarida]; let sn = 0; const W = 900, RH = 40, H = 150 + rows.length * RH + 40; const sc = 2;
   const c = document.createElement('canvas'); c.width = W * sc; c.height = H * sc; const x = c.getContext('2d'); x.scale(sc, sc);
   x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.fillStyle = '#0b5394'; x.fillRect(0, 0, W, 96);
   x.fillStyle = '#fff'; x.font = '700 30px Inter, sans-serif'; x.fillText(`${sb.ad} · Sayım sonucu`, 32, 48); x.font = '500 18px Inter, sans-serif'; x.fillText(`${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${benAd()}`, 32, 78);
   x.font = '700 14px Inter, sans-serif'; x.fillStyle = '#6b7280'; x.fillText('ÜRÜN', 80, 130); x.textAlign = 'right'; x.fillText('SAYIM', W - 32, 130); x.textAlign = 'left';
-  rows.forEach((u, i) => { const y = 150 + i * RH; if (i % 2) { x.fillStyle = '#f3f6fa'; x.fillRect(16, y, W - 32, RH); } const pls = pulseMi(u); const ur = pls ? { ad: satirAd(sb, u), birim: 'adet' } : S.urunler[u]; const t = tp[u];
-    x.fillStyle = '#9ca3af'; x.font = '600 15px Inter, sans-serif'; x.textAlign = 'right'; x.fillText(i < sira.length ? i + 1 : '·', 60, y + 26); x.textAlign = 'left';
+  rows.forEach((u, i) => { const y = 150 + i * RH; if (i % 2) { x.fillStyle = '#f3f6fa'; x.fillRect(16, y, W - 32, RH); } if (grupMi(u)) { x.fillStyle = '#e5eaf1'; x.fillRect(16, y, W - 32, RH); x.fillStyle = '#6b7280'; x.font = '800 14px Inter, sans-serif'; x.fillText(GRUP_AD[u], 32, y + 26); return; } const pls = pulseMi(u); const ur = pls ? { ad: satirAd(sb, u), birim: 'adet' } : S.urunler[u]; const t = tp[u];
+    x.fillStyle = '#9ca3af'; x.font = '600 15px Inter, sans-serif'; x.textAlign = 'right'; x.fillText(i < sira.length ? ++sn : '·', 60, y + 26); x.textAlign = 'left';
     x.fillStyle = pls ? '#9ca3af' : '#111827'; x.font = '600 18px Inter, sans-serif'; x.fillText(ur.ad, 80, y + 26);
     x.textAlign = 'right'; x.font = '800 19px Inter, sans-serif'; x.fillStyle = pls ? '#9ca3af' : '#0b5394'; x.fillText(pls ? '0' : `${fmt(t ? t.t : 0, ur.birim)} ${ur.birim === 'adet' ? 'ad' : 'kg'}`, W - 32, y + 26); x.textAlign = 'left'; });
   const blob = await new Promise(r => c.toBlob(r, 'image/png')); const ad = `sayim-${sb.ad}-${sy.tarih}.png`;
@@ -1162,14 +1164,21 @@ function konumdanCikar(sid, kid, u) {
 function sonucListesi(s) { const var_ = subedekiUrunler(s); const l = (s.sonuc || []).filter(u => var_.has(u) && S.urunler[u] && S.urunler[u].aktif !== false); for (const u of [...var_].sort((a, b) => (S.urunler[a]?.sira ?? 999) - (S.urunler[b]?.sira ?? 999))) if (!l.includes(u) && S.urunler[u] && S.urunler[u].aktif !== false) l.push(u); return l; }
 // Pulse'ta olup bizde sayılmayan ürünler (ör. EKMEK): sonuçta "Pulse'a 0 gir" satırı olarak sıra korunur. s.pulse = [{id, ad}], s.sonuc içinde 'p:'+id olarak yer alır.
 const pulseMi = u => typeof u === 'string' && u.startsWith('p:');
+// Sonuç grupları: sabit üç başlık satırı ('g:1' Ürünler, 'g:2' İçecekler, 'g:3' Tanımsızlar); s.sonuc içinde ürünlerle birlikte sürüklenerek dizilir.
+const GRUP_AD = { 'g:1': '1 · ÜRÜNLER', 'g:2': '2 · İÇECEKLER', 'g:3': '3 · TANIMSIZLAR' };
+const grupMi = u => u === 'g:1' || u === 'g:2' || u === 'g:3';
 function sonucSatirlari(s) {
   const pl = new Set((s.pulse || []).map(p => 'p:' + p.id)); const base = sonucListesi(s); const bs = new Set(base); const out = [], gor = new Set();
-  for (const u of (s.sonuc || [])) if ((pl.has(u) || bs.has(u)) && !gor.has(u)) { out.push(u); gor.add(u); }
+  for (const u of (s.sonuc || [])) if ((pl.has(u) || bs.has(u) || grupMi(u)) && !gor.has(u)) { out.push(u); gor.add(u); }
   for (const u of base) if (!gor.has(u)) { out.push(u); gor.add(u); }
   for (const u of pl) if (!gor.has(u)) out.push(u);
+  if (!out.some(grupMi)) return ['g:1', ...out, 'g:2', 'g:3']; // başlık kaydedilmemiş şubede hepsi Ürünler altında başlar
+  if (!out.includes('g:1')) out.unshift('g:1');
+  if (!out.includes('g:2')) { const i = out.indexOf('g:3'); if (i >= 0) out.splice(i, 0, 'g:2'); else out.push('g:2'); }
+  if (!out.includes('g:3')) out.push('g:3');
   return out;
 }
-const satirAd = (s, u) => pulseMi(u) ? ((s.pulse || []).find(p => 'p:' + p.id === u)?.ad || '') : urunAd(u);
+const satirAd = (s, u) => grupMi(u) ? GRUP_AD[u] : pulseMi(u) ? ((s.pulse || []).find(p => 'p:' + p.id === u)?.ad || '') : urunAd(u);
 function subedekiUrunler(s) { const set = new Set(); (s.konumlar || []).forEach(k => (k.satirlar || []).forEach(x => set.add(x.u))); return set; }
 function siparisListesi(s) { const var_ = sonucListesi(s).filter(u => S.urunler[u]?.siparis); const sr = (s.siparisSira || []).filter(u => var_.includes(u)); return [...sr, ...var_.filter(u => !sr.includes(u))]; }
 function siparisSiraAyar(sid) {
@@ -1185,10 +1194,12 @@ function siparisSiraAyar(sid) {
 function sonucSiraAyar(sid) {
   const s = S.subeler[sid]; if (!s) return; const l = sonucSatirlari(s); const kaydet = n => { s.sonuc = n; subeKaydet(sid, { sonuc: n }); };
   const eksik = []; const nPulse = (s.pulse || []).length;
-  $('#app').innerHTML = ust('Sonuç sırası', { geri: true, subeSecici: false, alt: `${s.ad} · ${l.length - nPulse} ürün${nPulse ? ` · ${nPulse} Pulse satırı` : ''}` }) + `<div class="pad">
+  $('#app').innerHTML = ust('Sonuç sırası', { geri: true, subeSecici: false, alt: `${s.ad} · ${l.filter(u => !pulseMi(u) && !grupMi(u)).length} ürün${nPulse ? ` · ${nPulse} Pulse satırı` : ''}` }) + `<div class="pad">
     <p class="note" style="margin:0 0 8px">Domino's sistemine giriş sırası. Sürükleyerek dizin. Liste sayım listesinden otomatik oluşur: konumlara eklenen ürün sona gelir, konumlardan çıkan ürün buradan da çıkar. Pulse'ta olup bizde sayılmayan ürünler (ör. ekmek) için <b>Pulse satırı</b> ekleyin; sonuçta "0 gir" olarak sırayı korur.</p>
     ${eksik.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${eksik.length} ürün sayılıyor ama bu listede yok</b><p class="note">${eksik.map(urunAd).map(esc).join(', ')}</p><div class="btns"><button class="btn sm alt" id="eksikEkle">Sona ekle</button></div></div>` : ''}
-    <div class="card sl" id="ul">${l.map((u, i) => pulseMi(u)
+    <div class="card sl" id="ul">${l.map((u, i) => grupMi(u)
+      ? `<div class="si sep"><span class="drag">≡</span><b>${GRUP_AD[u]}</b>${u === 'g:3' ? '<small>yeni gelen ürünler en sona düşer</small>' : ''}</div>`
+      : pulseMi(u)
       ? `<div class="si pls"><span class="drag">≡</span><div class="nm">${esc(satirAd(s, u))}<small>Pulse satırı · sonuçta "0 gir"</small></div>${admin() ? `<button class="chip" style="padding:4px 9px;font-size:11.5px;color:var(--red);border-color:var(--red)" data-pdel="${esc(u)}">Kaldır</button>` : ''}</div>`
       : `<div class="si"><span class="drag">≡</span><div class="nm">${esc(urunAd(u))}</div></div>`).join('') || '<div class="empty" style="padding:20px">Konumlarda ürün yok.</div>'}</div>
     ${admin() ? '<div class="btns"><button class="btn alt" id="pEkle">+ Pulse satırı ekle</button></div>' : ''}</div>`;
@@ -1199,13 +1210,13 @@ function sonucSiraAyar(sid) {
     const pulse = (s.pulse || []).filter(p => 'p:' + p.id !== u), sonuc = (s.sonuc || []).filter(x => x !== u); Object.assign(s, { pulse, sonuc }); subeKaydet(sid, { pulse, sonuc }); render(); });
   if ($('#pEkle')) $('#pEkle').onclick = () => openSheet(`<h2>Pulse satırı ekle</h2><p class="note">Pulse'ta bulunan ama bizde sayılmayan ürün. Sonuçta gri bir satır olarak çıkar, rakam olarak <b>0</b> kopyalanır.</p>
     <label class="field"><span>Pulse'taki ürün adı</span><input id="pAd" placeholder="Ör. EKMEK (L)"></label>
-    <label class="field"><span>Hangi ürünün altına gelsin?</span><select id="pOnce"><option value="">Listenin başına</option>${l.filter(u => !pulseMi(u)).map(u => `<option value="${esc(u)}">${esc(urunAd(u))}</option>`).join('')}</select></label>
+    <label class="field"><span>Hangi ürünün altına gelsin?</span><select id="pOnce"><option value="">Listenin başına</option>${l.filter(u => !pulseMi(u) && !grupMi(u)).map(u => `<option value="${esc(u)}">${esc(urunAd(u))}</option>`).join('')}</select></label>
     <div class="err" id="pe"></div><div class="btns"><button class="btn" id="pHep">Bütün şubelere ekle</button><button class="btn alt" id="pBu">Sadece ${esc(s.ad)}</button></div>`, el => {
     const ekle = hepsi => {
       const ad = el.querySelector('#pAd').value.trim(); const once = el.querySelector('#pOnce').value; if (!ad) { el.querySelector('#pe').textContent = 'Ürün adı yazın.'; return; }
       const id = 'x' + Date.now().toString(36); const hedefler = hepsi ? Object.keys(S.subeler) : [sid];
       for (const h of hedefler) { const b = S.subeler[h]; if (!b) continue; const pulse = [...(b.pulse || []), { id, ad }]; const sira = sonucSatirlari(b); const i = once ? sira.indexOf(once) : -1;
-        const sonuc = [...sira]; sonuc.splice(once ? (i >= 0 ? i + 1 : sonuc.length) : 0, 0, 'p:' + id); Object.assign(b, { pulse, sonuc }); subeKaydet(h, { pulse, sonuc }); }
+        const sonuc = [...sira]; sonuc.splice(once ? (i >= 0 ? i + 1 : sonuc.length) : sonuc.indexOf('g:1') + 1, 0, 'p:' + id); Object.assign(b, { pulse, sonuc }); subeKaydet(h, { pulse, sonuc }); }
       closeSheet(); toast(`${ad} eklendi${hepsi ? ' (bütün şubeler)' : ''}.`); render();
     };
     if (el.querySelector('#pHep')) el.querySelector('#pHep').onclick = () => ekle(true); el.querySelector('#pBu').onclick = () => ekle(false);
