@@ -43,7 +43,7 @@ const closeSheet = () => $('#sheetRoot').replaceChildren();
 async function onayla(msg, evet = 'Evet') { return new Promise(res => { openSheet(`<h2>Emin misiniz?</h2><p class="note" style="font-size:14px">${msg}</p><div class="btns"><button class="btn alt" id="hy">Vazgeç</button><button class="btn" id="he">${esc(evet)}</button></div>`, el => { el.querySelector('#hy').onclick = () => { closeSheet(); res(false); }; el.querySelector('#he').onclick = () => { closeSheet(); res(true); }; }); }); }
 
 /* ================= Durum ================= */
-const S = { ai: {}, eslesme: {}, irsaliyeler: [], siparisler: [],
+const S = { ai: {}, ayar: {}, ayarYuklendi: false, eslesme: {}, irsaliyeler: [], siparisler: [],
   user: null, me: null, meYuklendi: false, kurulumVar: null,
   urunler: {}, urunYuklendi: false, subeler: {}, kullanicilar: [],
   subeId: null, sayimlar: [], tab: 'sayim', ar: null, syId: null, sonucId: null,
@@ -78,6 +78,7 @@ onAuthStateChanged(auth, async u => {
   render();
 });
 function baglan() {
+  if (!S.unsub.ayar) S.unsub.ayar = onSnapshot(doc(db, 'genel', 'ayar'), s => { S.ayar = (s.exists() && s.data()) || {}; S.ayarYuklendi = true; eskiIrsaliyeleriSil(); }, () => { });
   if (!S.unsub.ai) S.unsub.ai = onSnapshot(doc(db, 'genel', 'ai'), s => { S.ai = (s.exists() && s.data()) || {}; }, () => { });
   if (!S.unsub.esl) S.unsub.esl = onSnapshot(doc(db, 'genel', 'eslesme'), s => { S.eslesme = (s.exists() && s.data().m) || {}; }, () => { });
   if (!S.unsub.urun) S.unsub.urun = onSnapshot(doc(db, 'genel', 'urunler'), s => { S.urunler = (s.exists() && s.data().u) || {}; S.urunDuzen = (s.exists() && s.data().duzen) || 0; S.urunYuklendi = true; adlariDuzenle(); gunlukTasi(); siparisKur(); grupKur(); render(); }, hata);
@@ -336,7 +337,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v4';
+const SURUM = 'v5';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -674,10 +675,11 @@ const gunEkle = (t, n) => { const d = new Date(t + 'T12:00'); d.setDate(d.getDat
 const refTarih = () => new Date().getHours() >= 22 ? gunEkle(bugun(), 1) : bugun(); // 22:00'den sonra yarına göre
 const kisaT = t => { const [y, m, d] = t.split('-'); return `${+d} ${AYK[+m - 1]}`; };
 const sonZaman = sy => sy.son || sy.basla || '';
-const IRS_SAKLA = 5; // her şubede sadece son 5 irsaliye (sevk tarihine göre) saklanır; yenisi kaydedilince en eskisi silinir
+// Her şubede sadece son N irsaliye (sevk tarihine göre) saklanır (Ayarlar'dan değişir, varsayılan 5); yenisi kaydedilince en eskisi silinir
+const irsSakla = () => Math.max(1, Math.min(30, parseInt(S.ayar && S.ayar.irsSakla, 10) || 5));
 function eskiIrsaliyeleriSil() {
-  if (S.irsaliyeler.length <= IRS_SAKLA) return; // S.irsaliyeler yeniden eskiye sıralı
-  const eski = S.irsaliyeler.slice(IRS_SAKLA);
+  if (!S.ayarYuklendi || S.irsaliyeler.length <= irsSakla()) return; // ayar gelmeden silinmez; S.irsaliyeler yeniden eskiye sıralı
+  const eski = S.irsaliyeler.slice(irsSakla());
   const b = writeBatch(db); eski.forEach(x => b.delete(doc(db, 'irsaliyeler', x.id))); b.commit().catch(() => { });
 }
 const _tpMemo = new Map();
@@ -742,7 +744,7 @@ function sktEkrani() {
   const kart = (renk, ic, u, alt, q) => `<div class="card" style="display:flex;gap:10px;padding:12px;align-items:center"><div style="width:34px;height:34px;border-radius:50%;background:${renk};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex:none">${ic}</div><div style="flex:1;min-width:0"><b>${esc(urunAd(u))}</b><div class="note" style="margin:2px 0 0">${alt}</div></div><div style="text-align:right"><b style="font-size:18px;color:${renk}">${fmt(q, S.urunler[u].birim)}</b><div class="note" style="margin:0">${birimK(u)}</div></div></div>`;
   const sec = (bas, l, f) => l.length ? `<div class="sec">${bas}</div>` + l.map(f).join('') : '';
   const son = [...S.sayimlar].sort((a, b) => sonZaman(b).localeCompare(sonZaman(a)))[0];
-  const irs = S.irsaliyeler.slice(0, 15).map(ir => `<button class="row" data-ir="${ir.id}"><div class="m"><b>${trTarih(ir.tarih)}</b><span>${esc(ir.no || 'numarasız')} · ${(ir.kalemler || []).length} kalem · ${esc(ir.ekleyen || '')}</span></div><span class="ch">›</span></button>`).join('');
+  const irs = S.irsaliyeler.slice(0, irsSakla()).map(ir => `<button class="row" data-ir="${ir.id}"><div class="m"><b>${trTarih(ir.tarih)}</b><span>${esc(ir.no || 'numarasız')} · ${(ir.kalemler || []).length} kalem · ${esc(ir.ekleyen || '')}</span></div><span class="ch">›</span></button>`).join('');
   const hicbir = !atik.length && !bugunL.length && !yarinL.length && !yakin.length && !coz.length;
   $('#app').innerHTML = ust(`${sb.ad} · SKT`, { alt: `${kisaT(R)}${R !== bg ? ' (yarın)' : ''}'e göre · ${son ? 'son sayım ' + kisaT(son.tarih) + ' ' + saat(sonZaman(son)) : 'sayım yok'}` }) + `<div class="pad">
     ${eksikIrsKutusu(sb)}
@@ -756,7 +758,7 @@ function sktEkrani() {
     ${hicbir && S.irsaliyeler.length && son ? `<div class="card p" style="background:var(--green-soft);border-color:transparent"><b style="color:var(--green)">SKT'si yaklaşan ürün yok.</b></div>` : ''}
     ${eksik.length && S.irsaliyeler.length ? `<p class="note">İrsaliye geçmişi henüz eksik olduğu için atık hesaplanmayan ürünler: ${eksik.map(urunAd).map(esc).join(', ')}</p>` : ''}
     ${yok.length ? `<p class="note">Sayımı olmayan SKT'li ürünler: ${yok.map(urunAd).map(esc).join(', ')}</p>` : ''}
-    <div class="sec">İrsaliyeler (son 5)</div><div class="card">${irs || '<div class="empty" style="padding:20px">İrsaliye yok.</div>'}</div></div>`;
+    <div class="sec">İrsaliyeler (son ${irsSakla()})</div><div class="card">${irs || '<div class="empty" style="padding:20px">İrsaliye yok.</div>'}</div></div>`;
   bagla();
   $('#opBtn').onclick = ozetPaylas; $('#irEkle').onclick = irsaliyeEkle; if ($('#irEkleU')) $('#irEkleU').onclick = irsaliyeEkle;
   $('#app').querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { const ir = S.irsaliyeler.find(x => x.id === b.dataset.ir); if (!ir) return; S.irsTaslak = { id: ir.id, tarih: ir.tarih, no: ir.no || '', kaynak: ir.kaynak, kalemler: (ir.kalemler || []).map(k => ({ ...k, gida: true })), digerleri: [] }; go({ ar: 'irs' }); });
@@ -890,6 +892,14 @@ function irsaliyeDuzen() {
     try { await setDoc(doc(db, 'irsaliyeler', id), data); if (Object.keys(yeniEsl).length) { const r = doc(db, 'genel', 'eslesme'); await updateDoc(r, yeniEsl).catch(() => setDoc(r, { m: Object.fromEntries(Object.entries(yeniEsl).map(([k, v]) => [k.slice(2), v])) }, { merge: true })); }
       toast('İrsaliye kaydedildi.'); S.irsTaslak = null; geri(); } catch (e) { hata(e); }
   };
+}
+function irsSaklaPanel() {
+  openSheet(`<h2>Saklanacak irsaliye</h2><p class="note">Her şubede son kaç irsaliye saklansın? Yenisi kaydedilince en eskisi silinir. SKT ve atık hesabı sadece saklanan irsaliyelere bakar; haftada 2 sevkiyatta 5 irsaliye yaklaşık 2,5 haftayı kapsar (en uzun SKT 10 gün). 1–30 arası.</p>
+    <label class="field"><span>İrsaliye sayısı</span><input id="isN" inputmode="numeric" pattern="[0-9]*" value="${irsSakla()}"></label><div class="err" id="isE"></div>
+    <p class="note">Sayıyı düşürürseniz fazla irsaliyeler her şubede ilk açılışta silinir, geri alınamaz.</p><div class="btns"><button class="btn" id="isK">Kaydet</button></div>`, el => {
+    el.querySelector('#isK').onclick = async () => { const n = parseInt(el.querySelector('#isN').value, 10); if (!n || n < 1 || n > 30) { el.querySelector('#isE').textContent = '1 ile 30 arasında bir sayı yazın.'; return; }
+      try { await setDoc(doc(db, 'genel', 'ayar'), { irsSakla: n }, { merge: true }); closeSheet(); toast(`Her şubede son ${n} irsaliye saklanacak.`); } catch (e) { hata(e); } };
+  });
 }
 function aiPanel() {
   openSheet(`<h2>Fotoğraf okuma (Gemini)</h2><p class="note">İrsaliye fotoğraflarını okumak için ücretsiz Gemini API anahtarı. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> adresinden alıp yapıştırın. Şube hesapları da bu anahtarla irsaliye okutur.</p>
@@ -1036,11 +1046,12 @@ function ayarlar() {
       <button class="row" id="gUrun"><div class="m"><b>Ürünler</b><span>${urunSay} ürün · koli içi, SKT ve çözülme günleri</span></div><span class="ch">›</span></button>
       <button class="row" id="seed2"><div class="m"><b>Excel'den ürün yükle</b><span>Serik Excel'indeki ürünler · olanlara dokunulmaz, eksikler eklenir</span></div><span class="ch">›</span></button>
       <button class="row" id="gAi"><div class="m"><b>Fotoğraf okuma (Gemini)</b><span>${S.ai.geminiKey ? 'Anahtar girildi · irsaliye fotoğrafları okunur' : 'Anahtar girilmedi · irsaliye sadece elle girilir'}</span></div><span class="ch">›</span></button>
+      <button class="row" id="gIrs"><div class="m"><b>Saklanacak irsaliye</b><span>Her şubede son ${irsSakla()} irsaliye saklanır · SKT hesabı bunlara bakar</span></div><span class="ch">›</span></button>
       <button class="row" id="gKul"><div class="m"><b>Kullanıcılar</b><span>${S.kullanicilar.length} hesap</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
   const sd = $('#seed'); if (sd) sd.onclick = seedYukle; $('#seed2').onclick = seedYukle;
   $('#app').querySelectorAll('[data-sb]').forEach(b => b.onclick = () => go({ ar: 'sube:' + b.dataset.sb }));
-  $('#gAi').onclick = aiPanel; $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => { S.urunAra = ''; S.urunFg = S.urunFs = 'hepsi'; go({ ar: 'urunler' }); }; $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
+  $('#gIrs').onclick = irsSaklaPanel; $('#gAi').onclick = aiPanel; $('#yeniSube').onclick = yeniSube; $('#gUrun').onclick = () => { S.urunAra = ''; S.urunFg = S.urunFs = 'hepsi'; go({ ar: 'urunler' }); }; $('#gKul').onclick = () => go({ ar: 'kullanicilar' });
 }
 async function seedYukle() {
   const { SEED } = await import('./seed.js?v=11');
