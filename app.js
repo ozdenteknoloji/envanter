@@ -337,7 +337,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v6';
+const SURUM = 'v7';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -940,19 +940,20 @@ function siparisEkrani() {
   const id = `${S.subeId}_${g.tarih}`; const kayit = S.siparisler.find(x => x.id === id) || {}; S.spTaslak = S.spTaslak && S.spTaslak.id === id && S.spTaslak.elde ? S.spTaslak : { id, ideal: { ...(kayit.ideal || {}) }, liste: { ...(kayit.liste || {}) }, elde: { ...(kayit.elde || {}) }, buff: kayit.buff ?? 0.5, not: kayit.not || '' };
   const T = S.spTaslak; const buff = T.buff;
   const urs = siparisListesi(sb);
-  const satir = u => { const x = S.urunler[u]; const ideal = T.ideal[u]; const sonEl = eldeBul(u); const elElle = !sayimdaMi(sb, u, 'gunluk'); const ov = elElle ? T.elde[u] : null; const el = ov != null ? { t: ov } : sonEl; const k = x.sKoli || 1;
-    const hedef = ideal != null ? r6(ideal / D * (D + buff)) : null; const koli = hedef != null && el ? r6((hedef - el.t) / k) : null; const oneri = koli != null ? Math.max(0, Math.ceil(koli)) : '';
+  const satir = u => { const x = S.urunler[u]; const ideal = T.ideal[u]; const sonEl = eldeBul(u); const elElle = !sayimdaMi(sb, u, 'gunluk'); const ov = elElle ? T.elde[u] : null; const el = ov != null ? { t: ov } : sonEl; const kBos = !(x.sKoli > 0); const k = kBos ? null : x.sKoli;
+    const hedef = ideal != null ? r6(ideal / D * (D + buff)) : null; const koli = hedef != null && el && k ? r6((hedef - el.t) / k) : null; const oneri = koli != null ? Math.max(0, Math.ceil(koli)) : '';
     const n = v => v == null ? '–' : fmt(v, x.birim === 'adet' ? 'adet' : 'kg');
-    return `<tr><td style="text-align:left;font-weight:600;font-size:12.5px">${esc(x.ad)}<div class="note" style="margin:0;font-size:10.5px">koli ${yaz(k)}</div></td>
+    return `<tr><td style="text-align:left;font-weight:600;font-size:12.5px">${esc(x.ad)}<div class="note" style="margin:0;font-size:10.5px">${kBos ? '<b style="color:var(--amber)">koli boş!</b>' : 'koli ' + yaz(k)}</div></td>
       <td><input class="spI" data-u="${u}" inputmode="decimal" enterkeyhint="next" value="${yaz(ideal)}" style="width:62px"></td>
       <td>${n(hedef)}</td><td>${elElle ? `<input class="spE" data-u="${u}" inputmode="decimal" enterkeyhint="next" value="${yaz(ov)}" placeholder="${sonEl ? yaz(sonEl.t) : 'yaz'}" title="Elle yazın; boşsa son sayım kullanılır" style="width:58px;border-color:var(--amber)">` : el ? n(el.t) : '<span style="color:var(--amber)">yok</span>'}</td>
-      <td class="${koli != null && koli <= 0 ? 'neg' : 'b'}">${koli == null ? '–' : koli <= 0 ? 'yeter' : yaz(Math.round(koli * 10) / 10)}</td>
+      <td class="${koli != null && koli <= 0 ? 'neg' : 'b'}">${kBos ? '<span style="color:var(--amber);font-size:11px">koli?</span>' : koli == null ? '–' : koli <= 0 ? 'yeter' : yaz(Math.round(koli * 10) / 10)}</td>
       <td><input class="spL" data-u="${u}" inputmode="numeric" enterkeyhint="next" value="${T.liste[u] ?? ''}" placeholder="${oneri}" style="width:50px;font-weight:800"></td></tr>`; };
   const son = [...S.sayimlar].sort((a, b) => sonZaman(b).localeCompare(sonZaman(a)))[0];
   const eskiSayim = !son || son.tarih < gunEkle(isGunu(), 0);
   $('#app').innerHTML = ust(`${sb.ad} · Sipariş`, { alt: `${trTarih(g.tarih)} siparişi · gün sayısı ${D}` }) + `<div class="pad sp">
     ${gunler.length > 1 ? `<div class="chips">${gunler.slice(0, 4).map(x => `<button class="chip ${x.tarih === g.tarih ? 'on' : ''}" data-t="${x.tarih}">${trTarih(x.tarih).split(' ').slice(0, 3).join(' ')}</button>`).join('')}</div>` : ''}
     <div class="card p" style="background:var(--blue-soft);border-color:transparent">Domino's'tan ideali <b style="color:var(--blue)">${trTarih(ar.bas)} – ${trTarih(ar.son)}</b> aralığıyla alın (${D} gün).</div>
+    ${(() => { const bos = urs.filter(u => !(S.urunler[u].sKoli > 0)); return bos.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${bos.length} üründe sipariş kolisi boş</b><p class="note">${bos.map(u => esc(urunAd(u))).join(', ')}. Bu ürünlerde koli önerisi hesaplanmaz, yanlış sipariş vermemek için ${admin() ? 'Ayarlar → Ürünler\'den "Sipariş kolisi"ni doldurun.' : 'yöneticiye haber verin.'}</p></div>` : ''; })()}
     ${eskiSayim ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${son ? `Son sayım ${trTarih(son.tarih)}.` : 'Sayım yok.'}</b><p class="note">Siparişten önce bugünün günlük sayımını yapın; "Elde" sütunu son sayımdan gelir.</p></div>` : ''}
     <div class="sec" style="padding-top:4px">Buff (gün)</div><div class="chips" style="flex-wrap:wrap">${BUFFLAR.map(b => `<button class="chip ${b === buff ? 'on' : ''}" data-b="${b}">${yaz(b)}</button>`).join('')}</div>
     <div class="card" style="overflow-x:auto"><table class="st spT"><tr style="font-size:10px;color:var(--mut);text-transform:uppercase;font-weight:800"><td style="text-align:left">Ürün <button id="spSira" title="Sipariş sırasını düzenle" style="border:0;background:none;font-size:14px;padding:0 4px;color:var(--blue)">✎</button></td><td>İdeal <button id="spYap" title="Excel'den toplu yapıştır" style="border:0;background:none;font-size:13px;padding:0 3px">📋</button><button id="spSif" title="Sıfırla" style="border:0;background:none;font-size:14px;padding:0 3px;color:var(--red)">↺</button></td><td>+Buff</td><td>Elde</td><td>Koli</td><td>Liste</td></tr>${urs.length ? (() => { const el = urs.filter(u => !sayimdaMi(sb, u, 'gunluk')); const son = el[el.length - 1]; return urs.map(u => satir(u) + (u === son ? `<tr><td colspan="6" style="text-align:left;font-size:11px;color:var(--amber);line-height:1.35;padding:6px 8px">☝ Bu ürünler günlük sayımda sayılmaz. <b>Elde</b> miktarını elle yazın; boş bırakırsanız son sayımdaki${(() => { const e = eldeBul(u); return e ? ` (${trTarih(e.sy.tarih)})` : ''; })()} miktar kullanılır.</td></tr>` : '')).join(''); })() : '<tr><td colspan="6"><div class="empty" style="padding:16px">Sipariş listesinde ürün yok. Ayarlar → Ürünler listesinde "Sipariş" işaretleyin.</div></td></tr>'}</table></div>
