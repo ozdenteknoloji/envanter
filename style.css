@@ -162,3 +162,5 @@ body.editing .toast{bottom:auto;top:calc(128px + env(safe-area-inset-top))}
 
 /* Şube seçim ekranı: dikey ortala */
 .login.orta{margin-top:0;min-height:calc(100vh - 40px);min-height:calc(100dvh - 40px);display:flex;flex-direction:column;justify-content:center}
+
+.st tr.pls td{color:var(--mut);background:var(--soft)}.st tr.pls td.v{font-weight:600}.sl .si.pls{background:var(--soft)}.sl .si.pls .nm{color:var(--mut)}

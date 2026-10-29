@@ -618,7 +618,7 @@ document.addEventListener('pointerdown', e => { const td = e.target.closest && e
 document.addEventListener('copy', e => {
   const t = document.querySelector('table.st'); const sel = window.getSelection(); if (!t || !sonucKopya || !sel.rangeCount || sel.isCollapsed || !t.contains(sel.anchorNode)) return;
   const sat = [...t.querySelectorAll('tr[data-u]')].filter(r => sel.containsNode(r, true)); if (!sat.length) return;
-  const ad = r => S.urunler[r.dataset.u]?.ad || '', say = r => { const x = sonucKopya[r.dataset.u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; };
+  const ad = r => pulseMi(r.dataset.u) ? satirAd(sube(), r.dataset.u) : (S.urunler[r.dataset.u]?.ad || ''), say = r => { if (pulseMi(r.dataset.u)) return '0'; const x = sonucKopya[r.dataset.u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; };
   const m = t.classList.contains('selAd') ? 'ad' : t.classList.contains('selSay') ? 'say' : 'ikisi';
   e.clipboardData.setData('text/plain', sat.map(r => m === 'ad' ? ad(r) : m === 'say' ? say(r) : ad(r) + '\t' + say(r)).join('\n')); e.preventDefault();
 });
@@ -627,10 +627,10 @@ function sonucEkrani() {
   const liste = S.sayimlar; if (!S.sonucId || !syBul(S.sonucId)) S.sonucId = liste[0]?.id || null; const secim = '';
   const sy = syBul(S.sonucId);
   if (!sy) { $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, subeSecici: false }) + `<div class="empty"><b>Sayım yok</b>Önce Sayım sekmesinden bir sayım başlatın.</div>`; bagla(); return; }
-  const tp = urunToplamlari(sy, sb); const sira = sonucListesi(sb).filter(u => tp[u]); sonucKopya = tp;
+  const tp = urunToplamlari(sy, sb); const sira = sonucSatirlari(sb).filter(u => pulseMi(u) || tp[u]); sonucKopya = tp;
   const disarida = [];
 
-  const satir = (u, no) => { const x = tp[u]; const ur = S.urunler[u]; 
+  const satir = (u, no) => { if (pulseMi(u)) return `<tr data-u="${u}" class="pls"><td class="no">${no}</td><td>${esc(satirAd(sb, u))}<span class="uns">Pulse'a 0 gir</span></td><td class="v">0</td></tr>`; const x = tp[u]; const ur = S.urunler[u]; 
     return `<tr data-u="${u}"><td class="no">${no}</td><td>${esc(ur.ad)}${!x || !x.say ? `<span class="uns">sayılmadı</span>` : ''}${sktEtiket(u, sy)}</td><td class="v">${fmt(x ? x.t : 0, ur.birim)}<small>${ur.birim === 'adet' ? 'ad' : 'kg'}</small></td></tr>`; };
   const ilr = ilerleme(sy, sb);
   $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, subeSecici: false, alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
@@ -644,8 +644,8 @@ function sonucEkrani() {
   $('#paylas').onclick = () => sonucResmi(sy, sb, sira, disarida, tp);
   // Excel'e yapıştırmak için: her satır bir ürün; sayılar virgüllü (Excel Türkçe), sayılmayan ürün boş satır
   const kopya = async (satirlar, ad) => { const t = satirlar.join('\n'); try { await navigator.clipboard.writeText(t); } catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); } toast(`${ad} kopyalandı (${satirlar.length} satır). Excel'de yapıştırın.`); };
-  $('#kpAd').onclick = () => kopya(sira.map(u => S.urunler[u].ad), 'Ürün adları');
-  $('#kpSay').onclick = () => kopya(sira.map(u => { const x = tp[u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; }), 'Rakamlar');
+  $('#kpAd').onclick = () => kopya(sira.map(u => satirAd(sb, u)), 'Ürün adları');
+  $('#kpSay').onclick = () => kopya(sira.map(u => { if (pulseMi(u)) return '0'; const x = tp[u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; }), 'Rakamlar');
   const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; S.ar = null; gecmis.length = 0; S.sayimlar = S.sayimlar.filter(x => x.id !== sy.id); render(); };
 }
 async function sonucResmi(sy, sb, sira, disarida, tp) {
@@ -654,10 +654,10 @@ async function sonucResmi(sy, sb, sira, disarida, tp) {
   x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.fillStyle = '#0b5394'; x.fillRect(0, 0, W, 96);
   x.fillStyle = '#fff'; x.font = '700 30px Inter, sans-serif'; x.fillText(`${sb.ad} · Sayım sonucu`, 32, 48); x.font = '500 18px Inter, sans-serif'; x.fillText(`${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${benAd()}`, 32, 78);
   x.font = '700 14px Inter, sans-serif'; x.fillStyle = '#6b7280'; x.fillText('ÜRÜN', 80, 130); x.textAlign = 'right'; x.fillText('SAYIM', W - 32, 130); x.textAlign = 'left';
-  rows.forEach((u, i) => { const y = 150 + i * RH; if (i % 2) { x.fillStyle = '#f3f6fa'; x.fillRect(16, y, W - 32, RH); } const ur = S.urunler[u]; const t = tp[u];
+  rows.forEach((u, i) => { const y = 150 + i * RH; if (i % 2) { x.fillStyle = '#f3f6fa'; x.fillRect(16, y, W - 32, RH); } const pls = pulseMi(u); const ur = pls ? { ad: satirAd(sb, u), birim: 'adet' } : S.urunler[u]; const t = tp[u];
     x.fillStyle = '#9ca3af'; x.font = '600 15px Inter, sans-serif'; x.textAlign = 'right'; x.fillText(i < sira.length ? i + 1 : '·', 60, y + 26); x.textAlign = 'left';
-    x.fillStyle = '#111827'; x.font = '600 18px Inter, sans-serif'; x.fillText(ur.ad, 80, y + 26);
-    x.textAlign = 'right'; x.font = '800 19px Inter, sans-serif'; x.fillStyle = '#0b5394'; x.fillText(`${fmt(t ? t.t : 0, ur.birim)} ${ur.birim === 'adet' ? 'ad' : 'kg'}`, W - 32, y + 26); x.textAlign = 'left'; });
+    x.fillStyle = pls ? '#9ca3af' : '#111827'; x.font = '600 18px Inter, sans-serif'; x.fillText(ur.ad, 80, y + 26);
+    x.textAlign = 'right'; x.font = '800 19px Inter, sans-serif'; x.fillStyle = pls ? '#9ca3af' : '#0b5394'; x.fillText(pls ? '0' : `${fmt(t ? t.t : 0, ur.birim)} ${ur.birim === 'adet' ? 'ad' : 'kg'}`, W - 32, y + 26); x.textAlign = 'left'; });
   const blob = await new Promise(r => c.toBlob(r, 'image/png')); const ad = `sayim-${sb.ad}-${sy.tarih}.png`;
   const file = new File([blob], ad, { type: 'image/png' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: ad }); return; } catch (e) { if (e.name === 'AbortError') return; } }
@@ -1096,7 +1096,7 @@ function subeAyar(id, kok) {
   });
   $('#sYer').onclick = () => go({ ar: 'yerler:' + id, yerAra: '', yerFiltre: 'hepsi' }); $('#sSon').onclick = () => go({ ar: 'sonucsira:' + id }); if (yon) $('#sTak').onclick = () => takvimPanel(id);
   $('#sKop').onclick = () => openSheet(`<h2>Başka şubeden kopyala</h2><p class="note">${esc(s.ad)} şubesinin konumları, sonuç sırası ve günlük listesi seçtiğiniz şubeninkiyle değiştirilecek.</p><label class="field"><span>Kaynak şube</span><select id="kq">${Object.keys(S.subeler).filter(x => x !== id).map(x => `<option value="${x}">${esc(S.subeler[x].ad)}</option>`).join('')}</select></label><div class="btns"><button class="btn" id="kz">Kopyala</button></div>`, el => {
-    el.querySelector('#kz').onclick = () => { const k = S.subeler[el.querySelector('#kq').value]; if (!k) return; subeKaydet(id, { konumlar: JSON.parse(JSON.stringify(k.konumlar || [])), sonuc: [...(k.sonuc || [])], gunluk: [...(k.gunluk || [])], isaret: JSON.parse(JSON.stringify(k.isaret || {})) }); closeSheet(); toast('Kopyalandı.'); };
+    el.querySelector('#kz').onclick = () => { const k = S.subeler[el.querySelector('#kq').value]; if (!k) return; subeKaydet(id, { konumlar: JSON.parse(JSON.stringify(k.konumlar || [])), sonuc: [...(k.sonuc || [])], pulse: JSON.parse(JSON.stringify(k.pulse || [])), gunluk: [...(k.gunluk || [])], isaret: JSON.parse(JSON.stringify(k.isaret || {})) }); closeSheet(); toast('Kopyalandı.'); };
   });
 }
 function konumAyar(sid, kid) {
@@ -1157,6 +1157,16 @@ function konumdanCikar(sid, kid, u) {
 }
 // Sonuç listesi: şubenin konumlarındaki ürünler; sonuç sırasındakiler o sırayla, yeni gelenler sona.
 function sonucListesi(s) { const var_ = subedekiUrunler(s); const l = (s.sonuc || []).filter(u => var_.has(u) && S.urunler[u] && S.urunler[u].aktif !== false); for (const u of [...var_].sort((a, b) => (S.urunler[a]?.sira ?? 999) - (S.urunler[b]?.sira ?? 999))) if (!l.includes(u) && S.urunler[u] && S.urunler[u].aktif !== false) l.push(u); return l; }
+// Pulse'ta olup bizde sayılmayan ürünler (ör. EKMEK): sonuçta "Pulse'a 0 gir" satırı olarak sıra korunur. s.pulse = [{id, ad}], s.sonuc içinde 'p:'+id olarak yer alır.
+const pulseMi = u => typeof u === 'string' && u.startsWith('p:');
+function sonucSatirlari(s) {
+  const pl = new Set((s.pulse || []).map(p => 'p:' + p.id)); const base = sonucListesi(s); const bs = new Set(base); const out = [], gor = new Set();
+  for (const u of (s.sonuc || [])) if ((pl.has(u) || bs.has(u)) && !gor.has(u)) { out.push(u); gor.add(u); }
+  for (const u of base) if (!gor.has(u)) { out.push(u); gor.add(u); }
+  for (const u of pl) if (!gor.has(u)) out.push(u);
+  return out;
+}
+const satirAd = (s, u) => pulseMi(u) ? ((s.pulse || []).find(p => 'p:' + p.id === u)?.ad || '') : urunAd(u);
 function subedekiUrunler(s) { const set = new Set(); (s.konumlar || []).forEach(k => (k.satirlar || []).forEach(x => set.add(x.u))); return set; }
 function siparisListesi(s) { const var_ = sonucListesi(s).filter(u => S.urunler[u]?.siparis); const sr = (s.siparisSira || []).filter(u => var_.includes(u)); return [...sr, ...var_.filter(u => !sr.includes(u))]; }
 function siparisSiraAyar(sid) {
@@ -1170,14 +1180,33 @@ function siparisSiraAyar(sid) {
   if ($('#spSifir')) $('#spSifir').onclick = () => { s.siparisSira = []; subeKaydet(sid, { siparisSira: [] }); render(); };
 }
 function sonucSiraAyar(sid) {
-  const s = S.subeler[sid]; if (!s) return; const l = sonucListesi(s); const kaydet = n => { s.sonuc = n; subeKaydet(sid, { sonuc: n }); };
-  const eksik = [];
-  $('#app').innerHTML = ust('Sonuç sırası', { geri: true, subeSecici: false, alt: `${s.ad} · ${l.length} ürün` }) + `<div class="pad">
-    <p class="note" style="margin:0 0 8px">Domino's sistemine giriş sırası. Sürükleyerek dizin. Liste sayım listesinden otomatik oluşur: konumlara eklenen ürün sona gelir, konumlardan çıkan ürün buradan da çıkar.</p>
+  const s = S.subeler[sid]; if (!s) return; const l = sonucSatirlari(s); const kaydet = n => { s.sonuc = n; subeKaydet(sid, { sonuc: n }); };
+  const eksik = []; const nPulse = (s.pulse || []).length;
+  $('#app').innerHTML = ust('Sonuç sırası', { geri: true, subeSecici: false, alt: `${s.ad} · ${l.length - nPulse} ürün${nPulse ? ` · ${nPulse} Pulse satırı` : ''}` }) + `<div class="pad">
+    <p class="note" style="margin:0 0 8px">Domino's sistemine giriş sırası. Sürükleyerek dizin. Liste sayım listesinden otomatik oluşur: konumlara eklenen ürün sona gelir, konumlardan çıkan ürün buradan da çıkar. Pulse'ta olup bizde sayılmayan ürünler (ör. ekmek) için <b>Pulse satırı</b> ekleyin; sonuçta "0 gir" olarak sırayı korur.</p>
     ${eksik.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${eksik.length} ürün sayılıyor ama bu listede yok</b><p class="note">${eksik.map(urunAd).map(esc).join(', ')}</p><div class="btns"><button class="btn sm alt" id="eksikEkle">Sona ekle</button></div></div>` : ''}
-    <div class="card sl" id="ul">${l.map((u, i) => `<div class="si"><span class="drag">≡</span><div class="nm">${esc(urunAd(u))}</div></div>`).join('') || '<div class="empty" style="padding:20px">Konumlarda ürün yok.</div>'}</div></div>`;
+    <div class="card sl" id="ul">${l.map((u, i) => pulseMi(u)
+      ? `<div class="si pls"><span class="drag">≡</span><div class="nm">${esc(satirAd(s, u))}<small>Pulse satırı · sonuçta "0 gir"</small></div>${admin() ? `<button class="chip" style="padding:4px 9px;font-size:11.5px;color:var(--red);border-color:var(--red)" data-pdel="${esc(u)}">Kaldır</button>` : ''}</div>`
+      : `<div class="si"><span class="drag">≡</span><div class="nm">${esc(urunAd(u))}</div></div>`).join('') || '<div class="empty" style="padding:20px">Konumlarda ürün yok.</div>'}</div>
+    ${admin() ? '<div class="btns"><button class="btn alt" id="pEkle">+ Pulse satırı ekle</button></div>' : ''}</div>`;
   bagla();
   suruklenebilir($('#ul'), (a, b) => { const n = [...l]; n.splice(b, 0, n.splice(a, 1)[0]); kaydet(n); render(); });
+  $('#app').querySelectorAll('[data-pdel]').forEach(b => b.onclick = async () => {
+    const u = b.dataset.pdel; if (!(await onayla(`<b>${esc(satirAd(s, u))}</b> Pulse satırı ${esc(s.ad)} şubesinin sonuç listesinden kalkacak.`, 'Kaldır'))) return;
+    const pulse = (s.pulse || []).filter(p => 'p:' + p.id !== u), sonuc = (s.sonuc || []).filter(x => x !== u); Object.assign(s, { pulse, sonuc }); subeKaydet(sid, { pulse, sonuc }); render(); });
+  if ($('#pEkle')) $('#pEkle').onclick = () => openSheet(`<h2>Pulse satırı ekle</h2><p class="note">Pulse'ta bulunan ama bizde sayılmayan ürün. Sonuçta gri bir satır olarak çıkar, rakam olarak <b>0</b> kopyalanır.</p>
+    <label class="field"><span>Pulse'taki ürün adı</span><input id="pAd" placeholder="Ör. EKMEK (L)"></label>
+    <label class="field"><span>Hangi ürünün altına gelsin?</span><select id="pOnce"><option value="">Listenin başına</option>${l.filter(u => !pulseMi(u)).map(u => `<option value="${esc(u)}">${esc(urunAd(u))}</option>`).join('')}</select></label>
+    <div class="err" id="pe"></div><div class="btns"><button class="btn" id="pHep">Bütün şubelere ekle</button><button class="btn alt" id="pBu">Sadece ${esc(s.ad)}</button></div>`, el => {
+    const ekle = hepsi => {
+      const ad = el.querySelector('#pAd').value.trim(); const once = el.querySelector('#pOnce').value; if (!ad) { el.querySelector('#pe').textContent = 'Ürün adı yazın.'; return; }
+      const id = 'x' + Date.now().toString(36); const hedefler = hepsi ? Object.keys(S.subeler) : [sid];
+      for (const h of hedefler) { const b = S.subeler[h]; if (!b) continue; const pulse = [...(b.pulse || []), { id, ad }]; const sira = sonucSatirlari(b); const i = once ? sira.indexOf(once) : -1;
+        const sonuc = [...sira]; sonuc.splice(once ? (i >= 0 ? i + 1 : sonuc.length) : 0, 0, 'p:' + id); Object.assign(b, { pulse, sonuc }); subeKaydet(h, { pulse, sonuc }); }
+      closeSheet(); toast(`${ad} eklendi${hepsi ? ' (bütün şubeler)' : ''}.`); render();
+    };
+    if (el.querySelector('#pHep')) el.querySelector('#pHep').onclick = () => ekle(true); el.querySelector('#pBu').onclick = () => ekle(false);
+  });
 }
 function yerlerAyar(sid) {
   const s = S.subeler[sid]; if (!s) return; const ks = s.konumlar || [];
