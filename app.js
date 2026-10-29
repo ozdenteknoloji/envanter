@@ -262,7 +262,51 @@ function ozetPaylas() {
     };
   });
 }
-function render() {
+/* ================= Ekran kilidi (çift giriş) =================
+   Sayım ve sipariş ekranına girince belgeye {kilit:{c: cihaz, kim, t}} yazılır, açıkken 15 sn'de bir tazelenir, çıkınca silinir.
+   Başka bir cihaz o belgede taze kilit görürse ekranı salt okunur açar. Kilit 45 sn tazelenmezse (telefon kapandı vb.) düşmüş sayılır.
+   "Taze" yerel saatlerden bağımsız: kilidin t değeri son 45 sn'de değişmediyse eski kabul edilir. */
+const CIHAZ = (() => { try { let c = sessionStorage.getItem('env_cihaz'); if (!c) { c = Math.random().toString(36).slice(2, 10) + Date.now().toString(36); sessionStorage.setItem('env_cihaz', c); } return c; } catch (e) { return Math.random().toString(36).slice(2, 10); } })();
+const KILIT_SN = 45000, KILIT_NABIZ = 15000;
+const KILIT = { k: null, sahip: false, al: false, kilitli: false, son: 0 }; const KILIT_GOR = {};
+function kilitBelge(k) { if (!k) return null; const i = k.indexOf('/'); const kol = k.slice(0, i), id = k.slice(i + 1); return (kol === 'sayimlar' ? S.sayimlar : S.siparisler).find(x => x.id === id) || null; }
+function kilitDurum(k, d) {
+  const l = d && d.kilit; if (!l || !l.c || l.c === CIHAZ) { delete KILIT_GOR[k]; return null; }
+  const simdi = Date.now(); let g = KILIT_GOR[k];
+  if (!g || g.c !== l.c || g.t !== l.t) { if (!g && simdi - (l.t || 0) > 600000) return null; g = KILIT_GOR[k] = { c: l.c, t: l.t, yerel: simdi }; } // 10 dk'dan eski kilit ilk görüşte düşmüş sayılır
+  return simdi - g.yerel < KILIT_SN ? l : null;
+}
+function kilitNesne() { return { c: CIHAZ, kim: benAd(), t: Date.now(), ...(KILIT.al ? { al: true } : {}) }; }
+function kilitYaz() {
+  const k = KILIT.k; if (!k) return; const i = k.indexOf('/'); const kol = k.slice(0, i), id = k.slice(i + 1); const l = kilitNesne(); KILIT.sahip = true; KILIT.son = Date.now();
+  const d = kilitBelge(k); if (d) d.kilit = l; const r = doc(db, kol, id);
+  if (kol === 'siparisler') setDoc(r, { sube: S.subeId, tarih: id.slice(S.subeId.length + 1), kilit: l }, { merge: true }).catch(() => { }); else updateDoc(r, { kilit: l }).catch(() => { });
+}
+function kilitBirak() {
+  const k = KILIT.k; const sahip = KILIT.sahip; Object.assign(KILIT, { k: null, sahip: false, al: false, kilitli: false, son: 0 }); if (!k || !sahip) return;
+  const i = k.indexOf('/'); const d = (k.startsWith('sayimlar') ? S.sayimlar : S.siparisler).find(x => x.id === k.slice(i + 1)); if (d && d.kilit && d.kilit.c === CIHAZ) delete d.kilit;
+  updateDoc(doc(db, k.slice(0, i), k.slice(i + 1)), { kilit: deleteField() }).catch(() => { });
+}
+function kilitTik(cizebilir) {
+  if (!KILIT.k) return; const d = kilitBelge(KILIT.k); const kd = kilitDurum(KILIT.k, d);
+  if (kd) { if (KILIT.sahip) { KILIT.sahip = false; KILIT.al = false; try { commitBuf(); } catch (e) { } } }
+  else if (!KILIT.sahip || Date.now() - KILIT.son > KILIT_NABIZ) kilitYaz();
+  if (cizebilir && !!kd !== KILIT.kilitli) { KILIT.kilitli = !!kd; render(); }
+}
+function kilitSenkron() {
+  const k = S.kilitIstek || null;
+  if (k !== KILIT.k) { kilitBirak(); if (k) { KILIT.k = k; kilitTik(false); } return; }
+  kilitTik(false);
+}
+const kilitKart = kd => `<div class="card p" style="background:var(--red-soft,#fdecec);border-color:transparent;margin:8px"><b style="color:var(--red)">🔒 Salt okunur</b><p class="note" style="margin:6px 0 8px">${kd.al ? `Kilidi <b>${esc(kd.kim || 'başka biri')}</b> kaldırdı, bu ekran artık salt okunur.` : `<b>${esc(kd.kim || 'Başka biri')}</b> bu ekranı başka bir cihazda şu an düzenliyor.`} Rakamları görebilirsiniz ama değiştiremezsiniz. O çıkınca ekran kendiliğinden açılır.</p><div class="btns" style="margin:0"><button class="btn alt sm" id="kilKal">Kilidi kaldır</button></div></div>`;
+async function kilitKaldir() {
+  if (!(await onayla('Bu ekranı şu an düzenleyen kişinin ekranı salt okunur olacak, düzenlemeyi siz devralacaksınız.', 'Kilidi kaldır'))) return;
+  if (!KILIT.k) return; KILIT.al = true; delete KILIT_GOR[KILIT.k]; kilitYaz(); KILIT.kilitli = false; render();
+}
+setInterval(() => kilitTik(true), 5000);
+window.addEventListener('pagehide', () => kilitBirak());
+function render() { S.kilitIstek = null; try { render0(); } finally { kilitSenkron(); } }
+function render0() {
   const app = $('#app');
   document.body.classList.toggle('editing', !!S.syId);
   if (!S.user) return girisEkrani();
@@ -337,7 +381,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v10';
+const SURUM = 'v11';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -473,6 +517,7 @@ function editor() {
   if (!S.ek || !ks.find(k => k.id === S.ek)) S.ek = ks[0].id;
   if (S.f && !ks.find(k => k.id === S.f.k)) S.f = null;
   const k = ks.find(x => x.id === S.ek);
+  const kd = sy.durum === 'bitti' ? null : kilitDurum('sayimlar/' + sy.id, sy); if (sy.durum !== 'bitti') { S.kilitIstek = 'sayimlar/' + sy.id; KILIT.kilitli = !!kd; }
   if (!S.f) { const i = k.satirlar.findIndex(s => !sayildi(deger(sy, k.id, s.u))); S.f = { k: k.id, i: i < 0 ? 0 : i, a: 'm' }; }
   const eskiScroll = $('#edlist')?.scrollTop ?? 0;
   const tartiVar = k.satirlar.some(s => s.y === 'tarti');
@@ -504,18 +549,19 @@ function editor() {
   if (fark) sol += ` · <a id="pGun">ayarlarda ${yaz(cs.y === 'koli' ? yeniC : yeniD)}, güncelle</a>`;
   const sonraki = k.satirlar[S.f.i + 1] ? urunAd(k.satirlar[S.f.i + 1].u) : (ks[ks.findIndex(x => x.id === k.id) + 1] ? '→ ' + ks[ks.findIndex(x => x.id === k.id) + 1].ad : 'bitti');
   const ilr = ilerleme(sy, sb);
-  $('#app').innerHTML = `<div class="ed">${ust(`${sb.ad} · ${TUR[sy.tur]} sayım`, { geri: true, alt: `${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır`, sag: (sy.durum === 'bitti' ? '' : `<button id="bitirBtn" style="background:#fff;color:var(--blue)">Bitir</button>`) + `<button id="sonucBtn">Sonuç</button>` })}
+  $('#app').innerHTML = `<div class="ed">${ust(`${sb.ad} · ${TUR[sy.tur]} sayım`, { geri: true, alt: `${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır`, sag: (sy.durum === 'bitti' || kd ? '' : `<button id="bitirBtn" style="background:#fff;color:var(--blue)">Bitir</button>`) + `<button id="sonucBtn">Sonuç</button>` })}
     <div class="ktabs">${tabs}${ayarTus}</div>
     <div class="edlist" id="edlist"><table class="et"><tr><th>Ürün</th><th>${k.satirlar.some(s => s.y === 'koli') ? 'Koli' : ''}${tartiVar ? (k.satirlar.some(s => s.y === 'koli') ? ' / ' : '') + 'Tartı' : ''}${!tartiVar && !k.satirlar.some(s => s.y === 'koli') ? 'Adet' : ''}</th><th>Toplam</th></tr>${rows}</table><div style="height:30px"></div></div>
     <div class="hint"><span>${sol}</span><span style="white-space:nowrap">Sonraki: <b>${esc(sonraki)}</b></span></div>
-    ${sy.durum === 'bitti' ? `<div class="hint" style="flex-direction:column;align-items:stretch;gap:8px;padding:12px"><span><b style="color:var(--green)">✓ Sayım bitirildi</b> · ${esc(sy.bitiren || '')} ${saat(sy.bitis)} · ${ilr.say}/${ilr.n} satır sayıldı. Değiştirmek için tekrar açın.</span><button class="btn alt" id="acBtn">Sayımı tekrar aç</button></div>` : `<div class="kp">${['1', '2', '3', 'del', '4', '5', '6', 'ekstra', '7', '8', '9', 'geri', ',', '0', 'ileri'].map(x => `<button class="k ${x === 'del' || x === 'geri' ? 's' : ''} ${x === 'ekstra' ? 's ac' : ''} ${x === 'ileri' ? 'go' : ''}" data-key="${x}">${{ del: '⌫', ekstra: S.f.a === 'x' ? '✓ Ekstra' : '+ Ekstra', geri: '‹ Geri', ileri: 'İleri ›' }[x] || x}</button>`).join('')}`}</div></div>`;
+    ${kd ? kilitKart(kd) : sy.durum === 'bitti' ? `<div class="hint" style="flex-direction:column;align-items:stretch;gap:8px;padding:12px"><span><b style="color:var(--green)">✓ Sayım bitirildi</b> · ${esc(sy.bitiren || '')} ${saat(sy.bitis)} · ${ilr.say}/${ilr.n} satır sayıldı. Değiştirmek için tekrar açın.</span><button class="btn alt" id="acBtn">Sayımı tekrar aç</button></div>` : `<div class="kp">${['1', '2', '3', 'del', '4', '5', '6', 'ekstra', '7', '8', '9', 'geri', ',', '0', 'ileri'].map(x => `<button class="k ${x === 'del' || x === 'geri' ? 's' : ''} ${x === 'ekstra' ? 's ac' : ''} ${x === 'ileri' ? 'go' : ''}" data-key="${x}">${{ del: '⌫', ekstra: S.f.a === 'x' ? '✓ Ekstra' : '+ Ekstra', geri: '‹ Geri', ileri: 'İleri ›' }[x] || x}</button>`).join('')}`}</div></div>`;
   const el = $('#edlist'); el.scrollTop = eskiScroll;
   const bb = $('#bitirBtn'); if (bb) bb.onclick = () => sayimBitir(sy);
   const ac = $('#acBtn'); if (ac) ac.onclick = () => { sy.durum = 'acik'; updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'acik' }).catch(hata); editor(); };
   bagla(); $('#sonucBtn').onclick = () => go({ syId: null, tab: 'sayim', ar: 'sonuc', sonucId: sy.id });
   sekmeSurukle();
   $('#app').querySelectorAll('.kt').forEach(b => b.onclick = () => { commitBuf(); S.ek = b.dataset.k; S.f = null; S.buf = null; editor(); $('#edlist').scrollTop = 0; gorunur(); });
-  if (sy.durum === 'bitti') return; // kilitli: hücre ve klavye çalışmaz
+  const kk = $('#kilKal'); if (kk) kk.onclick = kilitKaldir;
+  if (sy.durum === 'bitti' || kd) return; // kilitli ya da bitmiş: hücre ve klavye çalışmaz
   $('#app').querySelectorAll('.cell').forEach(c => c.onclick = e => { e.stopPropagation(); commitBuf(); S.f = { k: S.ek, i: +c.dataset.i, a: c.dataset.a }; S.buf = null; editor(); });
   $('#app').querySelectorAll('tr.gh').forEach(h => h.onclick = () => { commitBuf(); const ky = `${S.ek}:${h.dataset.g}`; S.kapali[ky] = !S.kapali[ky]; const t = $('#edlist').scrollTop; editor(); $('#edlist').scrollTop = t; });
   $('#app').querySelectorAll('td.n').forEach(c => c.onclick = () => { commitBuf(); S.f = { k: S.ek, i: +c.dataset.i, a: 'm' }; S.buf = null; editor(); });
@@ -969,6 +1015,7 @@ function siparisEkrani() {
   const g = gunler.find(x => x.tarih === S.spTarih); const D = g.sure; const ar = idealAralik(g.tarih, D);
   const id = `${S.subeId}_${g.tarih}`; const kayit = S.siparisler.find(x => x.id === id) || {}; S.spTaslak = S.spTaslak && S.spTaslak.id === id && S.spTaslak.elde ? S.spTaslak : { id, ideal: { ...(kayit.ideal || {}) }, liste: { ...(kayit.liste || {}) }, elde: { ...(kayit.elde || {}) }, buff: kayit.buff ?? 0.5, not: kayit.not || '' };
   const T = S.spTaslak; const buff = T.buff;
+  S.kilitIstek = 'siparisler/' + id; const kd = kilitDurum(S.kilitIstek, S.siparisler.find(x => x.id === id)); KILIT.kilitli = !!kd;
   const urs = siparisListesi(sb);
   const satir = u => { const x = S.urunler[u]; const ideal = T.ideal[u]; const sonEl = eldeBul(u); const elElle = !sayimdaMi(sb, u, 'gunluk'); const ov = elElle ? T.elde[u] : null; const el = ov != null ? { t: ov } : sonEl; const kBos = !(x.sKoli > 0); const k = kBos ? null : x.sKoli;
     const hedef = ideal != null ? r6(ideal / D * (D + buff + (anaMi(u) ? anaMiktar() : 0))) : null; const koli = hedef != null && el && k ? r6((hedef - el.t) / k) : null; const oneri = koli != null ? Math.max(0, Math.ceil(koli)) : '';
@@ -984,6 +1031,7 @@ function siparisEkrani() {
     <div style="display:flex;gap:8px;align-items:center">${gunler.length > 1 ? `<div class="chips" style="flex:1;min-width:0">${gunler.slice(0, 4).map(x => `<button class="chip ${x.tarih === g.tarih ? 'on' : ''}" data-t="${x.tarih}">${trTarih(x.tarih).split(' ').slice(0, 3).join(' ')}</button>`).join('')}</div>` : '<div style="flex:1"></div>'}
       <select id="spB" title="Buff (gün): hedef = ideal ÷ gün × (gün + buff)" style="flex:0 0 auto;padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:inherit;font-weight:700;font:inherit">${[...new Set([...buffListe(), buff])].sort((a, b) => a - b).map(b => `<option value="${b}" ${b === buff ? 'selected' : ''}>Buff ${yaz(b)}</option>`).join('')}</select></div>
     <div class="card p" style="background:var(--blue-soft);border-color:transparent">Domino's'tan ideali <b style="color:var(--blue)">${trTarih(ar.bas)} – ${trTarih(ar.son)}</b> aralığıyla alın (${D} gün).</div>
+    ${kd ? kilitKart(kd) : ''}
     ${(() => { const bos = urs.filter(u => !(S.urunler[u].sKoli > 0)); return bos.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${bos.length} üründe sipariş kolisi boş</b><p class="note">${bos.map(u => esc(urunAd(u))).join(', ')}. Bu ürünlerde koli önerisi hesaplanmaz, yanlış sipariş vermemek için ${admin() ? 'Ayarlar → Ürünler\'den "Sipariş kolisi"ni doldurun.' : 'yöneticiye haber verin.'}</p></div>` : ''; })()}
     ${eskiSayim ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${son ? `Son sayım ${trTarih(son.tarih)}.` : 'Sayım yok.'}</b><p class="note">Siparişten önce bugünün günlük sayımını yapın; "Elde" sütunu son sayımdan gelir.</p></div>` : ''}
     <div class="card" style="overflow-x:auto"><table class="st spT"><tr style="font-size:10px;color:var(--mut);text-transform:uppercase;font-weight:800"><td style="text-align:left">Ürün <button id="spSira" title="Sipariş sırasını düzenle" style="border:0;background:none;font-size:14px;padding:0 4px;color:var(--blue)">✎</button></td><td>İdeal <button id="spYap" title="Excel'den toplu yapıştır" style="border:0;background:none;font-size:13px;padding:0 3px">📋</button><button id="spSif" title="Sıfırla" style="border:0;background:none;font-size:14px;padding:0 3px;color:var(--red)">↺</button></td><td>Hedef</td><td>Elde</td><td>Koli</td><td>Liste</td></tr>${urs.length ? (() => { const el = urs.filter(u => !sayimdaMi(sb, u, 'gunluk')); const son = el[el.length - 1]; return urs.map(u => satir(u) + (u === son ? `<tr><td colspan="6" style="text-align:left;font-size:11px;color:var(--amber);line-height:1.35;padding:6px 8px">☝ Bu ürünler günlük sayımda sayılmaz. <b>Elde</b> miktarını elle yazın; boş bırakırsanız son sayımdaki${(() => { const e = eldeBul(u); return e ? ` (${trTarih(e.sy.tarih)})` : ''; })()} miktar kullanılır.</td></tr>` : '')).join(''); })() : '<tr><td colspan="6"><div class="empty" style="padding:16px">Sipariş listesinde ürün yok. Ayarlar → Ürünler listesinde "Sipariş" işaretleyin.</div></td></tr>'}</table></div>
@@ -992,7 +1040,9 @@ function siparisEkrani() {
     <div class="btns"><button class="btn" id="spP">Listeyi paylaş</button></div>
     <p class="note" style="text-align:center">${kayit.zaman ? `Kaydedildi · ${esc(kayit.kim || '')} ${saat(kayit.zaman)}` : 'Yazdıkça kaydedilir.'}</p></div>`;
   bagla();
-  S.spT ||= {}; const kaydet = () => { clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, elde: T.elde, not: T.not, kim: benAd(), zaman: new Date().toISOString() }).catch(hata), 600); };
+  const kkS = $('#kilKal'); if (kkS) kkS.onclick = kilitKaldir;
+  if (kd) { $('#app').querySelectorAll('.sp input, .sp select, .sp textarea').forEach(e => { e.disabled = true; }); ['spYap', 'spSif', 'spSira'].forEach(i => { const b = $('#' + i); if (b) b.hidden = true; }); }
+  S.spT ||= {}; const kaydet = () => { if (KILIT.kilitli) return; clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, elde: T.elde, not: T.not, kim: benAd(), zaman: new Date().toISOString(), ...(KILIT.sahip && KILIT.k === 'siparisler/' + id ? { kilit: kilitNesne() } : {}) }).catch(hata), 600); };
   $('#app').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { S.spTarih = b.dataset.t; S.spTaslak = null; render(); });
   $('#spSira').onclick = () => go({ tab: 'ayarlar', syId: null, ar: 'siparissira:' + S.subeId });
   $('#spB').onchange = e => { T.buff = +e.target.value; kaydet(); render(); };
