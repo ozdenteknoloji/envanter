@@ -336,7 +336,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v2';
+const SURUM = 'v3';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -640,7 +640,7 @@ function sonucEkrani() {
   const ilr = ilerleme(sy, sb);
   $('#app').innerHTML = ust(`${sb.ad} · Sonuç`, { geri: true, subeSecici: false, alt: `${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır · ${sy.durum === 'bitti' ? 'bitti ✓' : 'devam ediyor'}` }) + `<div class="pad">
     <div class="card">
-    <table class="st">${sira.map(u => satir(u, grupMi(u) ? '' : ++no)).join('')}
+    <table class="st">${sira.map(u => satir(u, grupMi(u) ? (no = 0, '') : ++no)).join('')}
     ${disarida.length ? `<tr class="dv"><td colspan="4">Sonuç listesinde olmayanlar</td></tr>` + disarida.map(u => satir(u, '·')).join('') : ''}</table></div>
     <div class="btns"><button class="btn alt" id="kpAd">Ürün adlarını kopyala</button><button class="btn alt" id="kpSay">Rakamları kopyala</button></div>
     <div class="btns"><button class="btn alt" id="paylas">Resim olarak paylaş</button></div>
@@ -659,7 +659,7 @@ async function sonucResmi(sy, sb, sira, disarida, tp) {
   x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.fillStyle = '#0b5394'; x.fillRect(0, 0, W, 96);
   x.fillStyle = '#fff'; x.font = '700 30px Inter, sans-serif'; x.fillText(`${sb.ad} · Sayım sonucu`, 32, 48); x.font = '500 18px Inter, sans-serif'; x.fillText(`${TUR[sy.tur]} sayım · ${trTarih(sy.tarih)} · ${benAd()}`, 32, 78);
   x.font = '700 14px Inter, sans-serif'; x.fillStyle = '#6b7280'; x.fillText('ÜRÜN', 80, 130); x.textAlign = 'right'; x.fillText('SAYIM', W - 32, 130); x.textAlign = 'left';
-  rows.forEach((u, i) => { const y = 150 + i * RH; if (i % 2) { x.fillStyle = '#f3f6fa'; x.fillRect(16, y, W - 32, RH); } if (grupMi(u)) { x.fillStyle = '#e5eaf1'; x.fillRect(16, y, W - 32, RH); x.fillStyle = '#6b7280'; x.font = '800 14px Inter, sans-serif'; x.fillText(GRUP_AD[u], 32, y + 26); return; } const pls = pulseMi(u); const ur = pls ? { ad: satirAd(sb, u), birim: 'adet' } : S.urunler[u]; const t = tp[u];
+  rows.forEach((u, i) => { const y = 150 + i * RH; if (i % 2) { x.fillStyle = '#f3f6fa'; x.fillRect(16, y, W - 32, RH); } if (grupMi(u)) { x.fillStyle = '#e5eaf1'; x.fillRect(16, y, W - 32, RH); x.fillStyle = '#6b7280'; x.font = '800 14px Inter, sans-serif'; x.fillText(GRUP_AD[u], 32, y + 26); sn = 0; return; } const pls = pulseMi(u); const ur = pls ? { ad: satirAd(sb, u), birim: 'adet' } : S.urunler[u]; const t = tp[u];
     x.fillStyle = '#9ca3af'; x.font = '600 15px Inter, sans-serif'; x.textAlign = 'right'; x.fillText(i < sira.length ? ++sn : '·', 60, y + 26); x.textAlign = 'left';
     x.fillStyle = pls ? '#9ca3af' : '#111827'; x.font = '600 18px Inter, sans-serif'; x.fillText(ur.ad, 80, y + 26);
     x.textAlign = 'right'; x.font = '800 19px Inter, sans-serif'; x.fillStyle = pls ? '#9ca3af' : '#0b5394'; x.fillText(pls ? '0' : `${fmt(t ? t.t : 0, ur.birim)} ${ur.birim === 'adet' ? 'ad' : 'kg'}`, W - 32, y + 26); x.textAlign = 'left'; });
@@ -1389,9 +1389,9 @@ function sekmeSurukle() {
 /* ================= Sürükle-bırak liste ================= */
 function suruklenebilir(liste, birak) {
   if (!liste) return;
-  const sat = [...liste.querySelectorAll('.si')].filter(x => x.querySelector('.drag')); const gercek = sat.filter(x => !x.classList.contains('sep')); const topN = gercek.length;
-  sat.forEach((it, fi) => { if (it.classList.contains('sep')) return; const i = gercek.indexOf(it); const b = document.createElement('button'); b.className = 'sn'; b.type = 'button'; b.textContent = i + 1; b.title = 'Sıra numarası yazarak taşı';
-    b.onclick = () => openSheet(`<h2>${esc(it.querySelector('.nm')?.firstChild?.textContent || '')}</h2><p class="note">Şu an ${i + 1}. sırada. Kaçıncı sıraya taşınsın? (1–${topN})</p><label class="field"><span>Yeni sıra</span><input id="snI" inputmode="numeric" pattern="[0-9]*" placeholder="${i + 1}"></label><div class="btns"><button class="btn" id="snK">Taşı</button></div>`, el => {
+  const sat = [...liste.querySelectorAll('.si')].filter(x => x.querySelector('.drag')); const gruplar = []; let gk = []; gruplar.push(gk); sat.forEach(x => { if (x.classList.contains('sep')) { gk = []; gruplar.push(gk); } else gk.push(x); }); // başlık (sep) satırları listeyi gruplara böler, numara her grupta 1'den başlar
+  sat.forEach((it, fi) => { if (it.classList.contains('sep')) return; const gercek = gruplar.find(g => g.includes(it)); const topN = gercek.length; const i = gercek.indexOf(it); const b = document.createElement('button'); b.className = 'sn'; b.type = 'button'; b.textContent = i + 1; b.title = 'Sıra numarası yazarak taşı';
+    b.onclick = () => openSheet(`<h2>${esc(it.querySelector('.nm')?.firstChild?.textContent || '')}</h2><p class="note">Şu an ${i + 1}. sırada. Bu grupta kaçıncı sıraya taşınsın? (1–${topN})</p><label class="field"><span>Yeni sıra</span><input id="snI" inputmode="numeric" pattern="[0-9]*" placeholder="${i + 1}"></label><div class="btns"><button class="btn" id="snK">Taşı</button></div>`, el => {
       const inp = el.querySelector('#snI'); inp.focus();
       const git = () => { const n = parseInt(inp.value, 10); if (!n) return; const h = Math.max(1, Math.min(topN, n)) - 1; closeSheet(); if (h !== i) birak(fi, sat.indexOf(gercek[h])); };
       el.querySelector('#snK').onclick = git; inp.onkeydown = e => { if (e.key === 'Enter') git(); }; });
