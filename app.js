@@ -336,7 +336,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v3';
+const SURUM = 'v4';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -674,9 +674,10 @@ const gunEkle = (t, n) => { const d = new Date(t + 'T12:00'); d.setDate(d.getDat
 const refTarih = () => new Date().getHours() >= 22 ? gunEkle(bugun(), 1) : bugun(); // 22:00'den sonra yarına göre
 const kisaT = t => { const [y, m, d] = t.split('-'); return `${+d} ${AYK[+m - 1]}`; };
 const sonZaman = sy => sy.son || sy.basla || '';
+const IRS_SAKLA = 5; // her şubede sadece son 5 irsaliye (sevk tarihine göre) saklanır; yenisi kaydedilince en eskisi silinir
 function eskiIrsaliyeleriSil() {
-  if (S.temizlendi['i' + S.subeId] || !S.irsaliyeler.length) return; S.temizlendi['i' + S.subeId] = 1;
-  const sinir = gunEkle(bugun(), -30); const eski = S.irsaliyeler.filter(x => x.tarih < sinir); if (!eski.length) return;
+  if (S.irsaliyeler.length <= IRS_SAKLA) return; // S.irsaliyeler yeniden eskiye sıralı
+  const eski = S.irsaliyeler.slice(IRS_SAKLA);
   const b = writeBatch(db); eski.forEach(x => b.delete(doc(db, 'irsaliyeler', x.id))); b.commit().catch(() => { });
 }
 const _tpMemo = new Map();
@@ -755,7 +756,7 @@ function sktEkrani() {
     ${hicbir && S.irsaliyeler.length && son ? `<div class="card p" style="background:var(--green-soft);border-color:transparent"><b style="color:var(--green)">SKT'si yaklaşan ürün yok.</b></div>` : ''}
     ${eksik.length && S.irsaliyeler.length ? `<p class="note">İrsaliye geçmişi henüz eksik olduğu için atık hesaplanmayan ürünler: ${eksik.map(urunAd).map(esc).join(', ')}</p>` : ''}
     ${yok.length ? `<p class="note">Sayımı olmayan SKT'li ürünler: ${yok.map(urunAd).map(esc).join(', ')}</p>` : ''}
-    <div class="sec">İrsaliyeler (son 30 gün)</div><div class="card">${irs || '<div class="empty" style="padding:20px">İrsaliye yok.</div>'}</div></div>`;
+    <div class="sec">İrsaliyeler (son 5)</div><div class="card">${irs || '<div class="empty" style="padding:20px">İrsaliye yok.</div>'}</div></div>`;
   bagla();
   $('#opBtn').onclick = ozetPaylas; $('#irEkle').onclick = irsaliyeEkle; if ($('#irEkleU')) $('#irEkleU').onclick = irsaliyeEkle;
   $('#app').querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { const ir = S.irsaliyeler.find(x => x.id === b.dataset.ir); if (!ir) return; S.irsTaslak = { id: ir.id, tarih: ir.tarih, no: ir.no || '', kaynak: ir.kaynak, kalemler: (ir.kalemler || []).map(k => ({ ...k, gida: true })), digerleri: [] }; go({ ar: 'irs' }); });

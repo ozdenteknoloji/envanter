@@ -43,7 +43,7 @@ Sayım ekranında (sadece yönetici) konum sekmelerinin sonundaki **⚙** iki ke
 - SKT başlangıcı: kağıt irsaliyede **Sevk Tarihi**, mailde **Sevkiyat Tarihi**. Son gün = sevk tarihi + ürünün SKT günü, o günün 23:59'una kadar. Saat 22:00'den sonra yarının tarihine göre bakılır.
 - Atık hesabı: son sayım (+ sayımdan sonra gelen irsaliyeler) − SKT'si geçmemiş irsaliyelerin toplamı. Önce gelen önce kullanılır varsayılır; atık önce Makeline'dan düşülür ("muhtemelen Makeline'daki"). Atık, ürünün SKT süresi kadar geriye irsaliye kaydı birikince hesaplanmaya başlar.
 - Çözülme günü olan ürünler (mozzarella gibi) gelişten sonraki günlerde "çözülüyor, henüz kullanmayın" diye görünür.
-- Sonuç ekranında SKT'li ürünlerin yanında "40 atık", "yarın SKT" ya da "SKT yok" yazar. İrsaliyeler 30 gün saklanır.
+- Sonuç ekranında SKT'li ürünlerin yanında "40 atık", "yarın SKT" ya da "SKT yok" yazar. Her şubede son 5 irsaliye saklanır; yenisi kaydedilince en eskisi silinir.
 
 ## Sonuç
 Şubenin **sonuç sırası** (Domino's sistemine giriş sırası) ile listelenir. Sisteme girilen ürüne dokunup işaretlenir; işaretler sayımla birlikte saklanır, başka telefondan da görünür. "Resim olarak paylaş" ile WhatsApp'a atılır.
