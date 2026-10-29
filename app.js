@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, createUserWithEmailAndPassword,
   updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  onSnapshot, collection, writeBatch, query, where, deleteField } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  onSnapshot, collection, writeBatch, query, where, deleteField, addDoc, limit } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, GIRIS_ALANI, VAPID_KEY } from "./config.js?v=3";
 import { hesapKur } from "./hesap.js?v=2";
 
@@ -286,6 +286,7 @@ function kilitYaz() {
   if (kol === 'siparisler') setDoc(r, { sube: S.subeId, tarih: id.slice(S.subeId.length + 1), kilit: l }, { merge: true }).catch(() => { }); else updateDoc(r, { kilit: l }).catch(() => { });
 }
 function kilitBirak() {
+  if (KILIT.k && KILIT.sahip) yedekYaz(KILIT.k, true);
   const k = KILIT.k; const sahip = KILIT.sahip; Object.assign(KILIT, { k: null, sahip: false, al: false, kilitli: false, son: 0 }); if (!k || !sahip) return;
   const i = k.indexOf('/'); const d = (k.startsWith('sayimlar') ? S.sayimlar : S.siparisler).find(x => x.id === k.slice(i + 1)); if (d && d.kilit && d.kilit.c === CIHAZ) delete d.kilit;
   updateDoc(doc(db, k.slice(0, i), k.slice(i + 1)), { kilit: deleteField() }).catch(() => { });
@@ -306,7 +307,56 @@ async function kilitKaldir() {
   if (!(await onayla('Bu ekranı şu an düzenleyen kişinin ekranı salt okunur olacak, düzenlemeyi siz devralacaksınız.', 'Kilidi kaldır'))) return;
   if (!KILIT.k) return; KILIT.al = true; delete KILIT_GOR[KILIT.k]; kilitYaz(); KILIT.kilitli = false; render();
 }
-setInterval(() => kilitTik(true), 5000);
+setInterval(() => { kilitTik(true); if (KILIT.k && KILIT.sahip) yedekYaz(KILIT.k); eskiYedekleriSil(); }, 5000);
+/* ================= Geçmiş (yedek) =================
+   Sipariş ve sayım ekranı açıkken belgenin son hali en fazla 10 dakikada bir (ve ekrandan çıkarken) 'gecmis' koleksiyonuna kopyalanır.
+   Boş belge yedeklenmez, böylece yanlışlıkla boşalan kayıt iyi yedeklerin yerine geçmez. Yedekler ayarlardaki gün sayısı kadar saklanır (varsayılan 7).
+   Geri dönüşü sadece yönetici yapar. */
+const YEDEK_SN = 600000; const yedekSon = {}; let yedekTemizlendi = false;
+const yedekGun = () => Math.max(1, Math.min(60, parseInt(S.ayar && S.ayar.gecmisGun, 10) || 7));
+const yedekSay = o => Object.keys(o || {}).length; const yedekSayIc = o => Object.values(o || {}).reduce((t, x) => t + yedekSay(x), 0);
+const yedekBos = (kol, v) => kol === 'siparisler' ? !(yedekSay(v.ideal) + yedekSay(v.liste) + yedekSay(v.elde)) : !(yedekSayIc(v.v) + yedekSay(v.p) + yedekSayIc(v.d));
+const yedekOzet = (kol, v) => kol === 'siparisler' ? `${yedekSay(v.ideal)} ideal · ${yedekSay(v.liste)} liste` : `${yedekSayIc(v.v) + yedekSay(v.p) + yedekSayIc(v.d)} sayım girişi`;
+function yedekYaz(k, zorla) {
+  try {
+    if (!k || !S.subeId) return; const g = yedekSon[k] ||= { t: 0, h: '' }; if (!zorla && Date.now() - g.t < YEDEK_SN) return;
+    const d = kilitBelge(k); if (!d) return; const i = k.indexOf('/'); const kol = k.slice(0, i), belge = k.slice(i + 1);
+    const h = JSON.stringify(d, (a, v) => (a === 'kilit' || a === 'id') ? undefined : v); const v = JSON.parse(h);
+    if (yedekBos(kol, v)) return; if (h === g.h) { g.t = Date.now(); return; }
+    g.t = Date.now(); g.h = h;
+    addDoc(collection(db, 'gecmis'), { sube: S.subeId, kol, belge, zaman: new Date().toISOString(), kim: benAd(), veri: v }).catch(() => { });
+  } catch (e) { }
+}
+async function eskiYedekleriSil() {
+  if (yedekTemizlendi || !S.ayarYuklendi || !S.subeId || !admin()) return; yedekTemizlendi = true;
+  try { const kes = new Date(Date.now() - yedekGun() * 864e5).toISOString(); const s = await getDocs(query(collection(db, 'gecmis'), where('zaman', '<', kes), limit(400))); if (s.empty) return; const b = writeBatch(db); s.docs.forEach(x => b.delete(x.ref)); await b.commit(); } catch (e) { }
+}
+const yedekZamanYaz = iso => { const d = new Date(iso); return `${trTarih(d.toLocaleDateString('sv-SE')).split(' ').slice(0, 2).join(' ')} ${saat(iso)}`; };
+function yedekPanel(k) {
+  const i = k.indexOf('/'); const kol = k.slice(0, i), belge = k.slice(i + 1);
+  openSheet(`<h2>Geçmiş</h2><p class="note">Bu kaydın son ${yedekGun()} günlük yedekleri (en fazla 10 dakikada bir alınır). Birine dönerseniz şu anki hali de önce yedeklenir.</p><div id="ygL"><p class="note">Yükleniyor…</p></div>`, async el => {
+    try {
+      const sn = await getDocs(query(collection(db, 'gecmis'), where('sube', '==', S.subeId), where('belge', '==', belge)));
+      const l = sn.docs.map(x => ({ id: x.id, ...x.data() })).filter(x => x.kol === kol).sort((a, b) => b.zaman.localeCompare(a.zaman)).slice(0, 40);
+      el.querySelector('#ygL').innerHTML = l.length ? `<div class="card">${l.map((x, j) => `<button class="row" data-j="${j}"><div class="m"><b>${esc(yedekZamanYaz(x.zaman))}</b><span>${esc(x.kim || '')} · ${yedekOzet(kol, x.veri || {})}</span></div><span class="ch">›</span></button>`).join('')}</div>` : '<p class="note">Henüz yedek yok. Ekranda çalışıldıkça oluşur.</p>';
+      el.querySelectorAll('[data-j]').forEach(b => b.onclick = () => yedekGeriDon(k, l[+b.dataset.j]));
+    } catch (e) { el.querySelector('#ygL').innerHTML = '<p class="note" style="color:var(--red)">Geçmiş okunamadı. Firestore kurallarına "gecmis" bölümü eklenmemiş olabilir.</p>'; }
+  });
+}
+async function yedekGeriDon(k, e) {
+  const i = k.indexOf('/'); const kol = k.slice(0, i), belge = k.slice(i + 1);
+  if (!(await onayla(`<b>${esc(yedekZamanYaz(e.zaman))}</b> (${esc(e.kim || '')}) sürümüne dönülecek: ${yedekOzet(kol, e.veri || {})}. Şu anki hali önce yedeklenir.`, 'Bu sürüme dön'))) return;
+  yedekYaz(k, true); yedekSon[k] = { t: Date.now(), h: JSON.stringify(e.veri) };
+  try { await setDoc(doc(db, kol, belge), kol === 'siparisler' ? { ...e.veri, kim: benAd(), zaman: new Date().toISOString() } : { ...e.veri }); } catch (er) { hata(er); return; }
+  S.spTaslak = null; closeSheet(); toast('Eski sürüme dönüldü.'); render();
+}
+function yedekAyarPanel() {
+  openSheet(`<h2>Geçmiş (yedek) süresi</h2><p class="note">Sipariş ve sayım kayıtlarının yedekleri kaç gün saklansın? Eskiler yönetici uygulamayı açınca otomatik silinir. 1–60 arası.</p>
+    <label class="field"><span>Gün sayısı</span><input id="ygN" inputmode="numeric" pattern="[0-9]*" value="${yedekGun()}"></label><div class="err" id="ygE"></div><div class="btns"><button class="btn" id="ygK">Kaydet</button></div>`, el => {
+    el.querySelector('#ygK').onclick = async () => { const n = parseInt(el.querySelector('#ygN').value, 10); if (!n || n < 1 || n > 60) { el.querySelector('#ygE').textContent = '1 ile 60 arasında bir sayı yazın.'; return; }
+      try { await setDoc(doc(db, 'genel', 'ayar'), { gecmisGun: n }, { merge: true }); S.ayar = { ...S.ayar, gecmisGun: n }; closeSheet(); toast(`Yedekler ${n} gün saklanacak.`); render(); } catch (er) { hata(er); } };
+  });
+}
 window.addEventListener('pagehide', () => kilitBirak());
 function render() { S.kilitIstek = null; try { render0(); } finally { kilitSenkron(); } }
 function render0() {
@@ -384,7 +434,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v14';
+const SURUM = 'v15';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -694,14 +744,14 @@ function sonucEkrani() {
     ${disarida.length ? `<tr class="dv"><td colspan="4">Sonuç listesinde olmayanlar</td></tr>` + disarida.map(u => satir(u, '·')).join('') : ''}</table></div>
     <div class="btns"><button class="btn alt" id="kpAd">Ürün adlarını kopyala</button><button class="btn alt" id="kpSay">Rakamları kopyala</button></div>
     <div class="btns"><button class="btn alt" id="paylas">Resim olarak paylaş</button></div>
-    <div class="btns">${admin() ? '<button class="btn red" id="sySil">Sayımı sil</button>' : ''}</div></div>`;
+    <div class="btns">${admin() ? '<button class="btn alt" id="syG">Geçmiş</button><button class="btn red" id="sySil">Sayımı sil</button>' : ''}</div></div>`;
   bagla();
   $('#paylas').onclick = () => sonucResmi(sy, sb, sira, disarida, tp);
   // Excel'e yapıştırmak için: her satır bir ürün; sayılar virgüllü (Excel Türkçe), sayılmayan ürün boş satır
   const kopya = async (satirlar, ad) => { const t = satirlar.join('\n'); try { await navigator.clipboard.writeText(t); } catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); } toast(`${ad} kopyalandı (${satirlar.length} satır). Excel'de yapıştırın.`); };
   $('#kpAd').onclick = () => kopya(urunSira.map(u => satirAd(sb, u)), 'Ürün adları');
   $('#kpSay').onclick = () => kopya(urunSira.map(u => { if (pulseMi(u)) return '0'; const x = tp[u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; }), 'Rakamlar');
-  const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; S.ar = null; gecmis.length = 0; S.sayimlar = S.sayimlar.filter(x => x.id !== sy.id); render(); };
+  const syG = $('#syG'); if (syG) syG.onclick = () => yedekPanel('sayimlar/' + sy.id); const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; S.ar = null; gecmis.length = 0; S.sayimlar = S.sayimlar.filter(x => x.id !== sy.id); render(); };
 }
 async function sonucResmi(sy, sb, sira, disarida, tp) {
   const rows = [...sira, ...disarida]; let sn = 0; const W = 900, RH = 40, H = 150 + rows.length * RH + 40; const sc = 2;
@@ -1051,12 +1101,12 @@ function siparisEkrani() {
     <div class="card" style="overflow-x:auto"><table class="st spT"><tr style="font-size:10px;color:var(--mut);text-transform:uppercase;font-weight:800"><td style="text-align:left">Ürün <button id="spSira" title="Sipariş sırasını düzenle" style="border:0;background:none;font-size:14px;padding:0 4px;color:var(--blue)">✎</button></td><td>İdeal <button id="spYap" title="Excel'den toplu yapıştır" style="border:0;background:none;font-size:13px;padding:0 3px">📋</button><button id="spSif" title="Sıfırla" style="border:0;background:none;font-size:14px;padding:0 3px;color:var(--red)">↺</button></td><td>Hedef</td><td>Elde</td><td>Koli</td><td>Liste</td></tr>${urs.length ? (() => { const el = urs.filter(u => !sayimdaMi(sb, u, 'gunluk')); const son = el[el.length - 1]; return urs.map(u => satir(u) + (u === son ? `<tr><td colspan="6" style="text-align:left;font-size:11px;color:var(--amber);line-height:1.35;padding:6px 8px">☝ Bu ürünler günlük sayımda sayılmaz. <b>Elde</b> miktarını elle yazın; boş bırakırsanız son sayımdaki${(() => { const e = eldeBul(u); return e ? ` (${trTarih(e.sy.tarih)})` : ''; })()} miktar kullanılır.</td></tr>` : '')).join(''); })() : '<tr><td colspan="6"><div class="empty" style="padding:16px">Sipariş listesinde ürün yok. Ayarlar → Ürünler listesinde "Sipariş" işaretleyin.</div></td></tr>'}</table></div>
     <p class="note">Koli = (ideal ÷ ${D} × (${D} + buff${anaMiktar() ? ' + ana malzemelerde ek buff' : ''}) − elde) ÷ sipariş kolisi. Liste'yi siz yazarsınız; boş bırakılan satırda soluk rakam öneridir. Günlük sayımda sayılmayan ürünlerde (örn. pizza kutuları) <b>Elde</b>'yi elle yazabilirsiniz; boş bırakırsanız son sayım kullanılır.</p>
     <label class="field"><span>Not (alacak / borç vb.)</span><input id="spN" value="${esc(T.not)}"></label>
-    <div class="btns"><button class="btn" id="spP">Listeyi paylaş</button></div>
+    <div class="btns"><button class="btn" id="spP">Listeyi paylaş</button>${admin() ? '<button class="btn alt" id="spG">Geçmiş</button>' : ''}</div>
     <p class="note" style="text-align:center">${kayit.zaman ? `Kaydedildi · ${esc(kayit.kim || '')} ${saat(kayit.zaman)}` : 'Yazdıkça kaydedilir.'}</p></div>`;
   bagla();
-  const kkS = $('#kilKal'); if (kkS) kkS.onclick = kilitKaldir;
+  const kkS = $('#kilKal'); if (kkS) kkS.onclick = kilitKaldir; const spG = $('#spG'); if (spG) spG.onclick = () => yedekPanel('siparisler/' + id);
   if (kd) { $('#app').querySelectorAll('.sp input, .sp select, .sp textarea').forEach(e => { e.disabled = true; }); ['spYap', 'spSif', 'spSira'].forEach(i => { const b = $('#' + i); if (b) b.hidden = true; }); }
-  S.spT ||= {}; const kaydet = () => { if (KILIT.kilitli) return; T.kirli = true; clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => { const zaman = new Date().toISOString(); T.sonYaz = zaman; return setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, elde: T.elde, not: T.not, kim: benAd(), zaman, ...(KILIT.sahip && KILIT.k === 'siparisler/' + id ? { kilit: kilitNesne() } : {}) }).catch(hata); }, 600); };
+  S.spT ||= {}; const kaydet = () => { if (KILIT.kilitli) return; const sv = S.siparisler.find(x => x.id === id); if (!T.sifir && !yedekSay(T.ideal) && sv && yedekSay(sv.ideal)) { toast('Tüm idealler boşaltılamaz. Silmek için ↺ İdealleri sıfırla\'yı kullanın.'); return; } T.kirli = true; clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => { const zaman = new Date().toISOString(); T.sonYaz = zaman; return setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, elde: T.elde, not: T.not, kim: benAd(), zaman, ...(KILIT.sahip && KILIT.k === 'siparisler/' + id ? { kilit: kilitNesne() } : {}) }).catch(hata); }, 600); };
   $('#app').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { S.spTarih = b.dataset.t; S.spTaslak = null; render(); });
   $('#spSira').onclick = () => go({ tab: 'ayarlar', syId: null, ar: 'siparissira:' + S.subeId });
   $('#spB').onchange = e => { T.buff = +e.target.value; kaydet(); render(); };
@@ -1082,7 +1132,7 @@ function siparisEkrani() {
     el.querySelector('#sK').onclick = closeSheet;
     el.querySelectorAll('[data-s]').forEach(b => b.onclick = async () => { const t = b.dataset.s; closeSheet();
       if (!(await onayla(t === 'ideal' ? 'Bu siparişin <b>idealleri</b> silinecek.' : t === 'liste' ? 'Bu siparişin <b>liste</b> kolileri silinecek.' : 'Bu siparişin <b>ideal, liste ve elle yazılan elde</b> miktarları silinecek.', 'Sıfırla'))) return;
-      if (t === 'ideal' || t === 'hepsi') T.ideal = {}; if (t === 'liste' || t === 'hepsi') T.liste = {}; if (t === 'hepsi') T.elde = {};
+      if (t === 'ideal' || t === 'hepsi') { T.ideal = {}; T.sifir = true; } if (t === 'liste' || t === 'hepsi') T.liste = {}; if (t === 'hepsi') T.elde = {};
       kaydet(); const y = window.scrollY; render(); window.scrollTo(0, y); toast('Sıfırlandı.'); }); });
   $('#spYap').onclick = () => openSheet(`<h2>İdealleri yapıştır</h2><p class="note">Pulse'tan kopyaladığınız ideal sütununu buraya yapıştırın. Sipariş listesindeki ürün sırasıyla (ya da ürün adı da kopyalandıysa ada göre) doldurulur.</p><textarea id="yt" rows="9" style="width:100%;font-size:14px;padding:10px;border:1px solid var(--line);border-radius:10px" placeholder="1589&#10;300&#10;..."></textarea><div class="btns"><button class="btn" id="yk">Uygula</button></div>`, el => { el.querySelector('#yt').focus(); el.querySelector('#yk').onclick = () => { const m = el.querySelector('#yt').value; closeSheet(); idealYapistir(m, 0); }; });
   $('#app').querySelectorAll('.spI,.spL,.spE').forEach(inp => {
@@ -1160,12 +1210,13 @@ function sistemAyar() {
   $('#app').innerHTML = ust('Sistem ayarları', { geri: true, subeSecici: false }) + `<div class="pad"><div class="card">
       <button class="row" id="gAi"><div class="m"><b>Fotoğraf okuma (Gemini)</b><span>${S.ai.geminiKey ? 'Anahtar girildi · irsaliye fotoğrafları okunur' : 'Anahtar girilmedi · irsaliye sadece elle girilir'}</span></div><span class="ch">›</span></button>
       <button class="row" id="gIrs"><div class="m"><b>Saklanacak irsaliye</b><span>Her şubede son ${irsSakla()} irsaliye saklanır · SKT hesabı bunlara bakar</span></div><span class="ch">›</span></button>
+      <button class="row" id="gGecmis"><div class="m"><b>Geçmiş (yedek) süresi</b><span>Sipariş ve sayım yedekleri ${yedekGun()} gün saklanır · Sipariş ve Sonuç ekranındaki "Geçmiş"ten geri dönülür</span></div><span class="ch">›</span></button>
       <button class="row" id="gBuff"><div class="m"><b>Buff seçenekleri</b><span>${buffListe().map(yaz).join(' · ')}</span></div><span class="ch">›</span></button>
       <button class="row" id="gGun"><div class="m"><b>Gün değişim saati</b><span>Saat ${String(gunSaat()).padStart(2, '0')}:00'a kadar bir önceki gün sayılır · sayım tarihi ve sipariş günleri</span></div><span class="ch">›</span></button>
       <button class="row" id="gAna"><div class="m"><b>Ana malzeme buffı</b><span>${(() => { const n = (S.ayar.anaUrunler || []).filter(id => S.urunler[id]).length; return n && anaMiktar() ? `${n} ürün · buffa ek ${yaz(anaMiktar())} gün` : 'Kapalı · hamur, mozzarella gibi ürünlere ek pay'; })()}</span></div><span class="ch">›</span></button>
       <button class="row" id="seed2"><div class="m"><b>Excel'den ürün yükle</b><span>Serik Excel'indeki ürünler · olanlara dokunulmaz, eksikler eklenir</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
-  $('#gAi').onclick = aiPanel; $('#gIrs').onclick = irsSaklaPanel; $('#gBuff').onclick = buffPanel; $('#gGun').onclick = gunSaatPanel; $('#gAna').onclick = () => go({ ar: 'anamalzeme' }); $('#seed2').onclick = seedYukle;
+  $('#gAi').onclick = aiPanel; $('#gIrs').onclick = irsSaklaPanel; $('#gGecmis').onclick = yedekAyarPanel; $('#gBuff').onclick = buffPanel; $('#gGun').onclick = gunSaatPanel; $('#gAna').onclick = () => go({ ar: 'anamalzeme' }); $('#seed2').onclick = seedYukle;
 }
 async function seedYukle() {
   const { SEED } = await import('./seed.js?v=11');

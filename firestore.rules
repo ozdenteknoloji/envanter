@@ -79,6 +79,13 @@ service cloud.firestore {
       allow delete: if subede(resource.data.sube);
     }
 
+    // Geçmiş (yedek): şube hesabı kendi şubesi için yedek yazar; okuma, geri dönüş ve temizlik sadece yönetici.
+    match /gecmis/{id} {
+      allow create: if subede(request.resource.data.sube) && request.resource.data.kol in ['siparisler', 'sayimlar'];
+      allow read, delete: if admin();
+      allow update: if false;
+    }
+
     // Bildirim cihazları: kendi telefonunu kaydeder/siler. Gönderimi sunucu (service account) yapar.
     match /cihazlar/{id} {
       allow read: if girisli() && (resource.data.uid == request.auth.uid || admin());
