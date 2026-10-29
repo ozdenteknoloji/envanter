@@ -210,31 +210,37 @@ function gitUygula() {
   if (g.git === 'irs') setTimeout(() => { if (S.tab === 'skt') irsaliyeEkle(); }, 150);
   if (g.git === 'skt') setTimeout(() => { if (S.tab === 'skt') ozetPaylas(); }, 150);
 }
-// SKT özeti resmi (koyu kart): şubeler alt alta, ürün başına renkli nokta
+// SKT özeti resmi: şubeler alt alta, her şubede Atık / Bugün son gün / Yarın son gün grupları. Koyu ya da açık tema, telefonun temasına uyar.
 function ozetResmi(parcalar) {
-  const W = 520, K = 2, RENK = { atik: ['#dc2626', 'Atık'], bugun: ['#ea580c', 'Bugün son gün'], yarin: ['#d97706', 'Yarın son gün'] };
+  const koyu = !(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+  const Rn = koyu ? { zemin: '#0f172a', kart: '#1e293b', yazi: '#fff', sol: '#94a3b8', cizgi: '#2b3a52', atik: '#ef4444', bugun: '#f97316', yarin: '#f59e0b', ok: '#4ade80' }
+    : { zemin: '#f1f5f9', kart: '#fff', yazi: '#0f172a', sol: '#64748b', cizgi: '#e2e8f0', atik: '#dc2626', bugun: '#ea580c', yarin: '#d97706', ok: '#16a34a' };
+  const GR = [['atik', 'ATIK'], ['bugun', 'BUGÜN SON GÜN'], ['yarin', 'YARIN SON GÜN']]; const W = 520, K = 2, GH = 30, RH = 40, BH = 42;
   const F = 'Inter, Arial, sans-serif'; const T = bugun().split('-').reverse().slice(0, 2).join('.');
-  const bloklar = parcalar.map(p => { const sat = []; for (const k of ['atik', 'bugun', 'yarin']) for (const i of p.o?.[k] || []) sat.push({ k, ...i }); return { ad: p.ad, sat, yok: !p.o }; });
-  const H = 64 + bloklar.reduce((a, b) => a + 12 + 42 + Math.max(1, b.sat.length) * 40, 0) + 14;
+  const bloklar = parcalar.map(p => ({ ad: p.ad, yok: !p.o, g: GR.map(([k, ad]) => ({ k, ad, sat: p.o?.[k] || [] })).filter(g => g.sat.length) }));
+  const yuk = b => BH + (b.g.length ? b.g.reduce((t, g) => t + GH + g.sat.length * RH, 0) : RH);
+  const H = 64 + bloklar.reduce((t, b) => t + 12 + yuk(b), 0) + 14;
   const cv = document.createElement('canvas'); cv.width = W * K; cv.height = H * K; const c = cv.getContext('2d'); c.scale(K, K);
-  c.fillStyle = '#0f172a'; c.fillRect(0, 0, W, H);
-  c.fillStyle = '#fff'; c.font = `800 24px ${F}`; c.textBaseline = 'middle'; c.textAlign = 'left'; c.fillText('SKT Özeti', 22, 36);
-  c.fillStyle = '#94a3b8'; c.font = `500 14px ${F}`; c.textAlign = 'right'; c.fillText(T, W - 22, 36);
+  c.fillStyle = Rn.zemin; c.fillRect(0, 0, W, H);
+  c.fillStyle = Rn.yazi; c.font = `800 24px ${F}`; c.textBaseline = 'middle'; c.textAlign = 'left'; c.fillText('SKT Özeti', 22, 36);
+  c.fillStyle = Rn.sol; c.font = `500 14px ${F}`; c.textAlign = 'right'; c.fillText(T, W - 22, 36);
   let y = 64;
   for (const b of bloklar) {
-    y += 12; c.fillStyle = '#1e293b'; c.beginPath(); c.roundRect(16, y, W - 32, 42 + Math.max(1, b.sat.length) * 40, 14); c.fill();
-    c.save(); c.clip(); c.fillStyle = '#0b3d73'; c.fillRect(16, y, W - 32, 42); c.restore();
+    y += 12; const bh = yuk(b); c.save(); c.beginPath(); c.roundRect(16, y, W - 32, bh, 14); c.clip();
+    c.fillStyle = Rn.kart; c.fillRect(16, y, W - 32, bh); c.fillStyle = '#0b3d73'; c.fillRect(16, y, W - 32, BH);
     c.fillStyle = '#fff'; c.font = `800 19px ${F}`; c.textAlign = 'left'; c.fillText(b.ad, 32, y + 21);
-    let ry = y + 42;
-    if (!b.sat.length) { c.fillStyle = b.yok ? '#94a3b8' : '#4ade80'; c.font = `700 17px ${F}`; c.fillText(b.yok ? 'Özet henüz hazır değil' : '✓ Bugün SKT yok', 32, ry + 20); ry += 40; }
-    for (const i of b.sat) {
-      c.fillStyle = '#334155'; c.fillRect(32, ry, W - 64, 1);
-      c.fillStyle = RENK[i.k][0]; c.beginPath(); c.arc(38, ry + 20, 6, 0, 7); c.fill();
-      c.fillStyle = '#fff'; c.font = `500 17px ${F}`; c.textAlign = 'left'; c.fillText(i.a, 54, ry + 20, 230);
-      c.font = `800 17px ${F}`; c.textAlign = 'right'; c.fillText(i.q, W - 132, ry + 20);
-      c.fillStyle = '#94a3b8'; c.font = `500 12px ${F}`; c.fillText(RENK[i.k][1], W - 30, ry + 20); ry += 40;
+    let ry = y + BH;
+    if (!b.g.length) { c.fillStyle = b.yok ? Rn.sol : Rn.ok; c.font = `700 17px ${F}`; c.fillText(b.yok ? 'Özet henüz hazır değil' : '✓ Bugün SKT yok', 32, ry + 20); }
+    for (const g of b.g) {
+      const r = Rn[g.k]; c.fillStyle = r + '24'; c.fillRect(16, ry, W - 32, GH);
+      c.fillStyle = r; c.font = `800 12px ${F}`; c.textAlign = 'left'; c.fillText(g.ad, 32, ry + 16); c.textAlign = 'right'; c.fillText(`${g.sat.length} ürün`, W - 32, ry + 16); ry += GH;
+      for (const i of g.sat) {
+        c.fillStyle = Rn.cizgi; c.fillRect(16, ry, W - 32, 1); c.fillStyle = r; c.fillRect(16, ry, 3, RH);
+        c.fillStyle = Rn.yazi; c.font = `500 17px ${F}`; c.textAlign = 'left'; c.fillText(i.a, 32, ry + 21, 300);
+        c.font = `800 17px ${F}`; c.textAlign = 'right'; c.fillText(i.q, W - 32, ry + 21); ry += RH;
+      }
     }
-    y = ry;
+    c.restore(); y += bh;
   }
   return new Promise(r => cv.toBlob(r, 'image/png'));
 }
@@ -440,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v16';
+const SURUM = 'v17';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
