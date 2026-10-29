@@ -332,23 +332,29 @@ async function eskiYedekleriSil() {
   try { const kes = new Date(Date.now() - yedekGun() * 864e5).toISOString(); const s = await getDocs(query(collection(db, 'gecmis'), where('zaman', '<', kes), limit(400))); if (s.empty) return; const b = writeBatch(db); s.docs.forEach(x => b.delete(x.ref)); await b.commit(); } catch (e) { }
 }
 const yedekZamanYaz = iso => { const d = new Date(iso); return `${trTarih(d.toLocaleDateString('sv-SE')).split(' ').slice(0, 2).join(' ')} ${saat(iso)}`; };
-function yedekPanel(k) {
-  const i = k.indexOf('/'); const kol = k.slice(0, i), belge = k.slice(i + 1);
-  openSheet(`<h2>Geçmiş</h2><p class="note">Bu kaydın son ${yedekGun()} günlük yedekleri (en fazla 10 dakikada bir alınır). Birine dönerseniz şu anki hali de önce yedeklenir.</p><div id="ygL"><p class="note">Yükleniyor…</p></div>`, async el => {
-    try {
-      const sn = await getDocs(query(collection(db, 'gecmis'), where('sube', '==', S.subeId), where('belge', '==', belge)));
-      const l = sn.docs.map(x => ({ id: x.id, ...x.data() })).filter(x => x.kol === kol).sort((a, b) => b.zaman.localeCompare(a.zaman)).slice(0, 40);
-      el.querySelector('#ygL').innerHTML = l.length ? `<div class="card">${l.map((x, j) => `<button class="row" data-j="${j}"><div class="m"><b>${esc(yedekZamanYaz(x.zaman))}</b><span>${esc(x.kim || '')} · ${yedekOzet(kol, x.veri || {})}</span></div><span class="ch">›</span></button>`).join('')}</div>` : '<p class="note">Henüz yedek yok. Ekranda çalışıldıkça oluşur.</p>';
-      el.querySelectorAll('[data-j]').forEach(b => b.onclick = () => yedekGeriDon(k, l[+b.dataset.j]));
-    } catch (e) { el.querySelector('#ygL').innerHTML = '<p class="note" style="color:var(--red)">Geçmiş okunamadı. Firestore kurallarına "gecmis" bölümü eklenmemiş olabilir.</p>'; }
-  });
-}
 async function yedekGeriDon(k, e) {
   const i = k.indexOf('/'); const kol = k.slice(0, i), belge = k.slice(i + 1);
   if (!(await onayla(`<b>${esc(yedekZamanYaz(e.zaman))}</b> (${esc(e.kim || '')}) sürümüne dönülecek: ${yedekOzet(kol, e.veri || {})}. Şu anki hali önce yedeklenir.`, 'Bu sürüme dön'))) return;
-  yedekYaz(k, true); yedekSon[k] = { t: Date.now(), h: JSON.stringify(e.veri) };
+  try { const cs = await getDoc(doc(db, kol, belge)); if (cs.exists()) { const cv = JSON.parse(JSON.stringify(cs.data(), (x, v) => x === 'kilit' ? undefined : v)); if (!yedekBos(kol, cv)) await addDoc(collection(db, 'gecmis'), { sube: e.sube, kol, belge, zaman: new Date().toISOString(), kim: (benAd() || '') + ' (geri dönmeden önce)', veri: cv }); } } catch (x) { }
+  yedekSon[k] = { t: Date.now(), h: JSON.stringify(e.veri) };
   try { await setDoc(doc(db, kol, belge), kol === 'siparisler' ? { ...e.veri, kim: benAd(), zaman: new Date().toISOString() } : { ...e.veri }); } catch (er) { hata(er); return; }
   S.spTaslak = null; closeSheet(); toast('Eski sürüme dönüldü.'); render();
+}
+function gecmisEkrani() {
+  const ids = Object.keys(S.subeler).sort((a, b) => S.subeler[a].ad.localeCompare(S.subeler[b].ad, 'tr'));
+  const sid = S.gecmisSube && S.subeler[S.gecmisSube] ? S.gecmisSube : (S.subeler[S.subeId] ? S.subeId : ids[0]); S.gecmisSube = sid;
+  $('#app').innerHTML = ust('Geçmiş', { geri: true, subeSecici: false }) + `<div class="pad"><label class="field"><span>Şube</span><select id="gcS">${ids.map(i => `<option value="${i}" ${i === sid ? 'selected' : ''}>${esc(S.subeler[i].ad)}</option>`).join('')}</select></label>
+    <p class="note">Sipariş ve sayım kayıtlarının son ${yedekGun()} günlük yedekleri (ekranda çalışılırken en fazla 10 dakikada bir alınır). Birine dokunursanız o sürüme dönersiniz; şu anki hali de önce yedeklenir.</p><div id="gcL"><p class="note">Yükleniyor…</p></div></div>`;
+  bagla(); $('#gcS').onchange = e => { S.gecmisSube = e.target.value; gecmisEkrani(); };
+  (async () => {
+    try {
+      const sn = await getDocs(query(collection(db, 'gecmis'), where('sube', '==', sid)));
+      const l = sn.docs.map(x => ({ id: x.id, ...x.data() })).sort((a, b) => b.zaman.localeCompare(a.zaman)).slice(0, 80); const el = $('#gcL'); if (!el || S.gecmisSube !== sid) return;
+      el.innerHTML = l.length ? `<div class="card">${l.map((x, j) => { const v = x.veri || {}; const ad = x.kol === 'siparisler' ? 'Sipariş' : `${(typeof TUR !== 'undefined' && TUR[v.tur]) || ''} sayım`.trim(); const t = v.tarih ? trTarih(v.tarih).split(' ').slice(0, 2).join(' ') : '';
+        return `<button class="row" data-j="${j}"><div class="m"><b>${esc(ad)} · ${esc(t)}</b><span>${esc(yedekZamanYaz(x.zaman))} · ${esc(x.kim || '')} · ${yedekOzet(x.kol, v)}</span></div><span class="ch">›</span></button>`; }).join('')}</div>` : '<p class="note">Bu şubede henüz yedek yok. Sipariş ya da sayım ekranında çalışıldıkça oluşur.</p>';
+      el.querySelectorAll('[data-j]').forEach(b => b.onclick = () => { const x = l[+b.dataset.j]; yedekGeriDon(x.kol + '/' + x.belge, x); });
+    } catch (e) { const el = $('#gcL'); if (el) el.innerHTML = '<p class="note" style="color:var(--red)">Geçmiş okunamadı. Firestore kurallarında "gecmis" bölümü var mı kontrol edin.</p>'; }
+  })();
 }
 function yedekAyarPanel() {
   openSheet(`<h2>Geçmiş (yedek) süresi</h2><p class="note">Sipariş ve sayım kayıtlarının yedekleri kaç gün saklansın? Eskiler yönetici uygulamayı açınca otomatik silinir. 1–60 arası.</p>
@@ -434,7 +440,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v15';
+const SURUM = 'v16';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -744,14 +750,14 @@ function sonucEkrani() {
     ${disarida.length ? `<tr class="dv"><td colspan="4">Sonuç listesinde olmayanlar</td></tr>` + disarida.map(u => satir(u, '·')).join('') : ''}</table></div>
     <div class="btns"><button class="btn alt" id="kpAd">Ürün adlarını kopyala</button><button class="btn alt" id="kpSay">Rakamları kopyala</button></div>
     <div class="btns"><button class="btn alt" id="paylas">Resim olarak paylaş</button></div>
-    <div class="btns">${admin() ? '<button class="btn alt" id="syG">Geçmiş</button><button class="btn red" id="sySil">Sayımı sil</button>' : ''}</div></div>`;
+    <div class="btns">${admin() ? '<button class="btn red" id="sySil">Sayımı sil</button>' : ''}</div></div>`;
   bagla();
   $('#paylas').onclick = () => sonucResmi(sy, sb, sira, disarida, tp);
   // Excel'e yapıştırmak için: her satır bir ürün; sayılar virgüllü (Excel Türkçe), sayılmayan ürün boş satır
   const kopya = async (satirlar, ad) => { const t = satirlar.join('\n'); try { await navigator.clipboard.writeText(t); } catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); } toast(`${ad} kopyalandı (${satirlar.length} satır). Excel'de yapıştırın.`); };
   $('#kpAd').onclick = () => kopya(urunSira.map(u => satirAd(sb, u)), 'Ürün adları');
   $('#kpSay').onclick = () => kopya(urunSira.map(u => { if (pulseMi(u)) return '0'; const x = tp[u]; return x && x.say ? String(Math.round(x.t * 100) / 100).replace('.', ',') : ''; }), 'Rakamlar');
-  const syG = $('#syG'); if (syG) syG.onclick = () => yedekPanel('sayimlar/' + sy.id); const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; S.ar = null; gecmis.length = 0; S.sayimlar = S.sayimlar.filter(x => x.id !== sy.id); render(); };
+  const sl = $('#sySil'); if (sl) sl.onclick = async () => { if (!(await onayla(`${TUR[sy.tur]} sayım (${trTarih(sy.tarih)}) tamamen silinecek.`, 'Sil'))) return; deleteDoc(doc(db, 'sayimlar', sy.id)).catch(hata); S.sonucId = null; S.ar = null; gecmis.length = 0; S.sayimlar = S.sayimlar.filter(x => x.id !== sy.id); render(); };
 }
 async function sonucResmi(sy, sb, sira, disarida, tp) {
   const rows = [...sira, ...disarida]; let sn = 0; const W = 900, RH = 40, H = 150 + rows.length * RH + 40; const sc = 2;
@@ -1101,10 +1107,10 @@ function siparisEkrani() {
     <div class="card" style="overflow-x:auto"><table class="st spT"><tr style="font-size:10px;color:var(--mut);text-transform:uppercase;font-weight:800"><td style="text-align:left">Ürün <button id="spSira" title="Sipariş sırasını düzenle" style="border:0;background:none;font-size:14px;padding:0 4px;color:var(--blue)">✎</button></td><td>İdeal <button id="spYap" title="Excel'den toplu yapıştır" style="border:0;background:none;font-size:13px;padding:0 3px">📋</button><button id="spSif" title="Sıfırla" style="border:0;background:none;font-size:14px;padding:0 3px;color:var(--red)">↺</button></td><td>Hedef</td><td>Elde</td><td>Koli</td><td>Liste</td></tr>${urs.length ? (() => { const el = urs.filter(u => !sayimdaMi(sb, u, 'gunluk')); const son = el[el.length - 1]; return urs.map(u => satir(u) + (u === son ? `<tr><td colspan="6" style="text-align:left;font-size:11px;color:var(--amber);line-height:1.35;padding:6px 8px">☝ Bu ürünler günlük sayımda sayılmaz. <b>Elde</b> miktarını elle yazın; boş bırakırsanız son sayımdaki${(() => { const e = eldeBul(u); return e ? ` (${trTarih(e.sy.tarih)})` : ''; })()} miktar kullanılır.</td></tr>` : '')).join(''); })() : '<tr><td colspan="6"><div class="empty" style="padding:16px">Sipariş listesinde ürün yok. Ayarlar → Ürünler listesinde "Sipariş" işaretleyin.</div></td></tr>'}</table></div>
     <p class="note">Koli = (ideal ÷ ${D} × (${D} + buff${anaMiktar() ? ' + ana malzemelerde ek buff' : ''}) − elde) ÷ sipariş kolisi. Liste'yi siz yazarsınız; boş bırakılan satırda soluk rakam öneridir. Günlük sayımda sayılmayan ürünlerde (örn. pizza kutuları) <b>Elde</b>'yi elle yazabilirsiniz; boş bırakırsanız son sayım kullanılır.</p>
     <label class="field"><span>Not (alacak / borç vb.)</span><input id="spN" value="${esc(T.not)}"></label>
-    <div class="btns"><button class="btn" id="spP">Listeyi paylaş</button>${admin() ? '<button class="btn alt" id="spG">Geçmiş</button>' : ''}</div>
+    <div class="btns"><button class="btn" id="spP">Listeyi paylaş</button></div>
     <p class="note" style="text-align:center">${kayit.zaman ? `Kaydedildi · ${esc(kayit.kim || '')} ${saat(kayit.zaman)}` : 'Yazdıkça kaydedilir.'}</p></div>`;
   bagla();
-  const kkS = $('#kilKal'); if (kkS) kkS.onclick = kilitKaldir; const spG = $('#spG'); if (spG) spG.onclick = () => yedekPanel('siparisler/' + id);
+  const kkS = $('#kilKal'); if (kkS) kkS.onclick = kilitKaldir;
   if (kd) { $('#app').querySelectorAll('.sp input, .sp select, .sp textarea').forEach(e => { e.disabled = true; }); ['spYap', 'spSif', 'spSira'].forEach(i => { const b = $('#' + i); if (b) b.hidden = true; }); }
   S.spT ||= {}; const kaydet = () => { if (KILIT.kilitli) return; const sv = S.siparisler.find(x => x.id === id); if (!T.sifir && !yedekSay(T.ideal) && sv && yedekSay(sv.ideal)) { toast('Tüm idealler boşaltılamaz. Silmek için ↺ İdealleri sıfırla\'yı kullanın.'); return; } T.kirli = true; clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => { const zaman = new Date().toISOString(); T.sonYaz = zaman; return setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, elde: T.elde, not: T.not, kim: benAd(), zaman, ...(KILIT.sahip && KILIT.k === 'siparisler/' + id ? { kilit: kilitNesne() } : {}) }).catch(hata); }, 600); };
   $('#app').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { S.spTarih = b.dataset.t; S.spTaslak = null; render(); });
@@ -1183,6 +1189,7 @@ function ayarlar() {
   if (sayfa === 'kullanicilar') return kullanicilarAyar();
   if (sayfa === 'subeler') return subelerAyar();
   if (sayfa === 'sistem') return sistemAyar();
+  if (sayfa === 'gecmis') return gecmisEkrani();
   if (sayfa === 'anamalzeme') return anaMalzemeAyar();
   const ids = Object.keys(S.subeler).sort((a, b) => S.subeler[a].ad.localeCompare(S.subeler[b].ad, 'tr'));
   const urunSay = Object.keys(S.urunler).length;
@@ -1193,10 +1200,11 @@ function ayarlar() {
       <button class="row" id="gSub"><div class="m"><b>Şubeler</b><span>${ids.length} şube${adlar ? ' · ' + esc(adlar) : ''}</span></div><span class="ch">›</span></button>
       <button class="row" id="gKul"><div class="m"><b>Kullanıcılar</b><span>${S.kullanicilar.length} hesap</span></div><span class="ch">›</span></button>
       <button class="row" id="gUrun"><div class="m"><b>Ürünler</b><span>${urunSay} ürün · koli içi, SKT ve çözülme günleri</span></div><span class="ch">›</span></button>
+      <button class="row" id="gGec"><div class="m"><b>Geçmiş</b><span>Sipariş ve sayım yedekleri · son ${yedekGun()} gün · eski sürüme dön</span></div><span class="ch">›</span></button>
       <button class="row" id="gSis"><div class="m"><b>Sistem ayarları</b><span>Fotoğraf okuma, saklanacak irsaliye, ürün yükleme</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
   const sd = $('#seed'); if (sd) sd.onclick = seedYukle;
-  $('#gSub').onclick = () => go({ ar: 'subeler' }); $('#gKul').onclick = () => go({ ar: 'kullanicilar' }); $('#gSis').onclick = () => go({ ar: 'sistem' });
+  $('#gSub').onclick = () => go({ ar: 'subeler' }); $('#gKul').onclick = () => go({ ar: 'kullanicilar' }); $('#gSis').onclick = () => go({ ar: 'sistem' }); $('#gGec').onclick = () => go({ ar: 'gecmis' });
   $('#gUrun').onclick = () => { S.urunAra = ''; S.urunFg = S.urunFs = 'hepsi'; go({ ar: 'urunler' }); };
 }
 function subelerAyar() {
@@ -1210,7 +1218,7 @@ function sistemAyar() {
   $('#app').innerHTML = ust('Sistem ayarları', { geri: true, subeSecici: false }) + `<div class="pad"><div class="card">
       <button class="row" id="gAi"><div class="m"><b>Fotoğraf okuma (Gemini)</b><span>${S.ai.geminiKey ? 'Anahtar girildi · irsaliye fotoğrafları okunur' : 'Anahtar girilmedi · irsaliye sadece elle girilir'}</span></div><span class="ch">›</span></button>
       <button class="row" id="gIrs"><div class="m"><b>Saklanacak irsaliye</b><span>Her şubede son ${irsSakla()} irsaliye saklanır · SKT hesabı bunlara bakar</span></div><span class="ch">›</span></button>
-      <button class="row" id="gGecmis"><div class="m"><b>Geçmiş (yedek) süresi</b><span>Sipariş ve sayım yedekleri ${yedekGun()} gün saklanır · Sipariş ve Sonuç ekranındaki "Geçmiş"ten geri dönülür</span></div><span class="ch">›</span></button>
+      <button class="row" id="gGecmis"><div class="m"><b>Geçmiş (yedek) süresi</b><span>Sipariş ve sayım yedekleri ${yedekGun()} gün saklanır · Ayarlar → Geçmiş'ten geri dönülür</span></div><span class="ch">›</span></button>
       <button class="row" id="gBuff"><div class="m"><b>Buff seçenekleri</b><span>${buffListe().map(yaz).join(' · ')}</span></div><span class="ch">›</span></button>
       <button class="row" id="gGun"><div class="m"><b>Gün değişim saati</b><span>Saat ${String(gunSaat()).padStart(2, '0')}:00'a kadar bir önceki gün sayılır · sayım tarihi ve sipariş günleri</span></div><span class="ch">›</span></button>
       <button class="row" id="gAna"><div class="m"><b>Ana malzeme buffı</b><span>${(() => { const n = (S.ayar.anaUrunler || []).filter(id => S.urunler[id]).length; return n && anaMiktar() ? `${n} ürün · buffa ek ${yaz(anaMiktar())} gün` : 'Kapalı · hamur, mozzarella gibi ürünlere ek pay'; })()}</span></div><span class="ch">›</span></button>
