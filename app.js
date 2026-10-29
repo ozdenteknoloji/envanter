@@ -23,7 +23,10 @@ const slug = s => ascii(s).replace(/[^a-z0-9]+/g, '').slice(0, 24) || 'x';
 const yeniId = p => p + Math.random().toString(36).slice(2, 8);
 const bugun = () => new Date().toLocaleDateString('sv-SE');
 // İş günü: dükkanlar gece kapandığı için 00:00–06:00 arası yapılan sayım bir önceki günün sayımıdır.
-const isGunu = () => { const d = new Date(); if (d.getHours() < 6) d.setDate(d.getDate() - 1); return d.toLocaleDateString('sv-SE'); };
+// İş günü: belirli saate kadar bir önceki gün sayılır (sayım tarihi ve sipariş günleri). Saat Ayarlar → Sistem ayarları → Gün değişim saati (varsayılan 12:00).
+const gunSaat = () => { const n = parseInt(S.ayar && S.ayar.gunSaat, 10); return n >= 0 && n <= 23 ? n : 12; };
+const isGunuAt = h => { const d = new Date(); if (d.getHours() < h) d.setDate(d.getDate() - 1); return d.toLocaleDateString('sv-SE'); };
+const isGunu = () => isGunuAt(gunSaat());
 const GUNU = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 const AYK = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 const haftaGunu = s => (new Date(s + 'T12:00').getDay() + 6) % 7; // 0 = Pazartesi
@@ -381,7 +384,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v12';
+const SURUM = 'v13';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -478,7 +481,7 @@ function sayimListesi() {
     ${haftalikGunu ? `<p class="note" style="text-align:center;margin-bottom:0">Bugün haftalık sayım günü: hangisini yapacağınızı seçin</p>` : ''}
     ${dugme(ana, true)}${haftalikGunu ? dugme('gunluk', true).replace('class="btn "', 'class="btn alt"') : ''}
     ${konumBos ? `<p class="note">Bu şubenin konumlarına henüz ürün eklenmemiş.${admin() ? ' Ayarlar → Şubeler bölümünden ekleyin.' : ''}</p>` : bos(ana) ? `<p class="note">${TUR[ana]} sayılacak ürün seçilmemiş.${admin() ? ' Ayarlar → Ürünler listesinde "Günlük" / "Haftalık" işaretlerini açın.' : ''}</p>` : ''}
-    ${bg !== bugun() ? `<p class="note" style="text-align:center">Saat 06:00'dan önce yapılan sayım ${trTarih(bg)} sayımı olarak kaydedilir.</p>` : ''}
+    ${bg !== bugun() ? `<p class="note" style="text-align:center">Saat ${String(gunSaat()).padStart(2, '0')}:00'dan önce yapılan sayım ${trTarih(bg)} sayımı olarak kaydedilir.</p>` : ''}
     <div class="card" style="margin-top:20px">
       ${!konumBos && !haftalikGunu ? `<div class="row" style="cursor:default"><div class="m"><b>${digerSy ? '' : diger === 'haftalik' ? `Haftalık sayım günü: ${GUNU[hg]}` : 'Bugün sadece günlük ürünler mi sayılacak?'}</b><span>${dugme(diger, false)}</span></div></div>` : ''}
       <button class="row" id="gecmisBtn"><div class="m"><b>Son sayımlar</b><span>Son günlük ve son haftalık sayım, sonuçlarıyla</span></div><span class="ch">›</span></button></div></div>`;
@@ -739,7 +742,7 @@ const sevkGunleri = sb => new Set((sb?.takvim || []).map(t => (t.gun + 1) % 7));
 function oncekiSevk(sb, tarih) { const g = sevkGunleri(sb); if (!g.size) return null; for (let i = 1; i <= 14; i++) { const d = gunEkle(tarih, -i); if (g.has(haftaGunu(d))) return d; } return null; }
 function eksikIrsaliyeler(sb) { // girilmesi gereken ama girilmemiş sevkiyatlar
   if (!sb?.takvim?.length || !S.irsaliyeler.length) return [];
-  const ilk = S.irsaliyeler[S.irsaliyeler.length - 1].tarih; const bg = isGunu(); const saat = new Date().getHours(); const out = [];
+  const ilk = S.irsaliyeler[S.irsaliyeler.length - 1].tarih; const bg = isGunuAt(6); const saat = new Date().getHours(); const out = [];
   for (let i = 0; i <= 8; i++) { const od = gunEkle(bg, -i); if (!sb.takvim.some(t => t.gun === haftaGunu(od))) continue; // od = sipariş günü
     const sevk = gunEkle(od, 1), son = gunEkle(od, 2); if (sevk <= ilk) continue;
     const zamaniGeldi = bg > son || (bg === son && saat >= 12); if (!zamaniGeldi || bg > gunEkle(sevk, 7)) continue;
@@ -955,6 +958,14 @@ function anaMalzemeAyar() {
   $('#app').querySelectorAll('[data-ab]').forEach(b => b.onclick = async () => { const id = b.dataset.ab; if (sec.has(id)) sec.delete(id); else sec.add(id); const arr = [...sec];
     S.ayar = { ...S.ayar, anaUrunler: arr }; render(); try { await setDoc(doc(db, 'genel', 'ayar'), { anaUrunler: arr }, { merge: true }); } catch (er) { hata(er); } });
 }
+function gunSaatPanel() {
+  openSheet(`<h2>Gün değişim saati</h2><p class="note">Bu saate kadar yapılan sayım bir önceki günün sayımı olarak kaydedilir, sipariş ekranında da bir önceki günün siparişi bu saate kadar görünür. Gece yarısından sonra çalışan şubeler için. 0–23 arası (0 = gece yarısı).</p>
+    <label class="field"><span>Saat</span><input id="gsN" inputmode="numeric" pattern="[0-9]*" value="${gunSaat()}"></label><div class="err" id="gsE"></div>
+    <p class="note">Dikkat: sabah bu saatten önce yapılan sayım dünün sayımı sayılır. Haftalık sayım gününü de bu saate göre değerlendirir.</p><div class="btns"><button class="btn" id="gsK">Kaydet</button></div>`, el => {
+    el.querySelector('#gsK').onclick = async () => { const raw = el.querySelector('#gsN').value.trim(); const n = parseInt(raw, 10); if (raw === '' || !(n >= 0 && n <= 23)) { el.querySelector('#gsE').textContent = '0 ile 23 arasında bir sayı yazın.'; return; }
+      S.ayar = { ...S.ayar, gunSaat: n }; try { await setDoc(doc(db, 'genel', 'ayar'), { gunSaat: n }, { merge: true }); closeSheet(); toast(`Gün değişim saati ${String(n).padStart(2, '0')}:00.`); render(); } catch (e) { hata(e); } };
+  });
+}
 function buffPanel() {
   const sec = new Set(buffListe()); const aday = new Set([...BUFFLAR, ...sec]);
   openSheet(`<h2>Buff seçenekleri</h2><p class="note">Sipariş ekranındaki buff listesinde hangi değerler (gün) çıksın? Dokunarak ekleyin ya da çıkarın. Listede olmayan bir değer isterseniz aşağıdan yazıp ekleyin.</p>
@@ -1147,10 +1158,11 @@ function sistemAyar() {
       <button class="row" id="gAi"><div class="m"><b>Fotoğraf okuma (Gemini)</b><span>${S.ai.geminiKey ? 'Anahtar girildi · irsaliye fotoğrafları okunur' : 'Anahtar girilmedi · irsaliye sadece elle girilir'}</span></div><span class="ch">›</span></button>
       <button class="row" id="gIrs"><div class="m"><b>Saklanacak irsaliye</b><span>Her şubede son ${irsSakla()} irsaliye saklanır · SKT hesabı bunlara bakar</span></div><span class="ch">›</span></button>
       <button class="row" id="gBuff"><div class="m"><b>Buff seçenekleri</b><span>${buffListe().map(yaz).join(' · ')}</span></div><span class="ch">›</span></button>
+      <button class="row" id="gGun"><div class="m"><b>Gün değişim saati</b><span>Saat ${String(gunSaat()).padStart(2, '0')}:00'a kadar bir önceki gün sayılır · sayım tarihi ve sipariş günleri</span></div><span class="ch">›</span></button>
       <button class="row" id="gAna"><div class="m"><b>Ana malzeme buffı</b><span>${(() => { const n = (S.ayar.anaUrunler || []).filter(id => S.urunler[id]).length; return n && anaMiktar() ? `${n} ürün · buffa ek ${yaz(anaMiktar())} gün` : 'Kapalı · hamur, mozzarella gibi ürünlere ek pay'; })()}</span></div><span class="ch">›</span></button>
       <button class="row" id="seed2"><div class="m"><b>Excel'den ürün yükle</b><span>Serik Excel'indeki ürünler · olanlara dokunulmaz, eksikler eklenir</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
-  $('#gAi').onclick = aiPanel; $('#gIrs').onclick = irsSaklaPanel; $('#gBuff').onclick = buffPanel; $('#gAna').onclick = () => go({ ar: 'anamalzeme' }); $('#seed2').onclick = seedYukle;
+  $('#gAi').onclick = aiPanel; $('#gIrs').onclick = irsSaklaPanel; $('#gBuff').onclick = buffPanel; $('#gGun').onclick = gunSaatPanel; $('#gAna').onclick = () => go({ ar: 'anamalzeme' }); $('#seed2').onclick = seedYukle;
 }
 async function seedYukle() {
   const { SEED } = await import('./seed.js?v=11');
