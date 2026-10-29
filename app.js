@@ -384,7 +384,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v13';
+const SURUM = 'v14';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -1024,7 +1024,10 @@ function siparisEkrani() {
   if (!(sb.takvim || []).length) { $('#app').innerHTML = ust(`${sb.ad} · Sipariş`) + `<div class="empty"><b>Sevkiyat takvimi girilmemiş</b>${admin() ? 'Ayarlar → Şube → Sevkiyat takvimi bölümünden sipariş günlerini girin.' : 'Yöneticiye haber verin.'}</div>`; return bagla(); }
   if (!S.spTarih || !gunler.find(g => g.tarih === S.spTarih)) S.spTarih = gunler[0].tarih;
   const g = gunler.find(x => x.tarih === S.spTarih); const D = g.sure; const ar = idealAralik(g.tarih, D);
-  const id = `${S.subeId}_${g.tarih}`; const kayit = S.siparisler.find(x => x.id === id) || {}; S.spTaslak = S.spTaslak && S.spTaslak.id === id && S.spTaslak.elde ? S.spTaslak : { id, ideal: { ...(kayit.ideal || {}) }, liste: { ...(kayit.liste || {}) }, elde: { ...(kayit.elde || {}) }, buff: kayit.buff ?? 0.5, not: kayit.not || '' };
+  const id = `${S.subeId}_${g.tarih}`; const kayit = S.siparisler.find(x => x.id === id) || {}; const taslakKur = () => ({ id, z: kayit.zaman || '', kirli: false, ideal: { ...(kayit.ideal || {}) }, liste: { ...(kayit.liste || {}) }, elde: { ...(kayit.elde || {}) }, buff: kayit.buff ?? 0.5, not: kayit.not || '' });
+  if (!(S.spTaslak && S.spTaslak.id === id && S.spTaslak.elde)) S.spTaslak = taslakKur();
+  else if (S.spTaslak.kirli && S.spTaslak.sonYaz && kayit.zaman === S.spTaslak.sonYaz) { S.spTaslak.kirli = false; S.spTaslak.z = kayit.zaman; } // kendi yazdığımız geri geldi
+  else if (!S.spTaslak.kirli && S.spTaslak.z !== (kayit.zaman || '')) S.spTaslak = taslakKur(); // kimse elle değiştirmediyse sunucudaki güncel veriyi al (geç gelen / başkasının yazdığı)
   const T = S.spTaslak; const buff = T.buff;
   S.kilitIstek = 'siparisler/' + id; const kd = kilitDurum(S.kilitIstek, S.siparisler.find(x => x.id === id)); KILIT.kilitli = !!kd;
   const urs = siparisListesi(sb);
@@ -1053,7 +1056,7 @@ function siparisEkrani() {
   bagla();
   const kkS = $('#kilKal'); if (kkS) kkS.onclick = kilitKaldir;
   if (kd) { $('#app').querySelectorAll('.sp input, .sp select, .sp textarea').forEach(e => { e.disabled = true; }); ['spYap', 'spSif', 'spSira'].forEach(i => { const b = $('#' + i); if (b) b.hidden = true; }); }
-  S.spT ||= {}; const kaydet = () => { if (KILIT.kilitli) return; clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, elde: T.elde, not: T.not, kim: benAd(), zaman: new Date().toISOString(), ...(KILIT.sahip && KILIT.k === 'siparisler/' + id ? { kilit: kilitNesne() } : {}) }).catch(hata), 600); };
+  S.spT ||= {}; const kaydet = () => { if (KILIT.kilitli) return; T.kirli = true; clearTimeout(S.spT[id]); S.spT[id] = setTimeout(() => { const zaman = new Date().toISOString(); T.sonYaz = zaman; return setDoc(doc(db, 'siparisler', id), { sube: S.subeId, tarih: g.tarih, sure: D, buff: T.buff, ideal: T.ideal, liste: T.liste, elde: T.elde, not: T.not, kim: benAd(), zaman, ...(KILIT.sahip && KILIT.k === 'siparisler/' + id ? { kilit: kilitNesne() } : {}) }).catch(hata); }, 600); };
   $('#app').querySelectorAll('[data-t]').forEach(b => b.onclick = () => { S.spTarih = b.dataset.t; S.spTaslak = null; render(); });
   $('#spSira').onclick = () => go({ tab: 'ayarlar', syId: null, ar: 'siparissira:' + S.subeId });
   $('#spB').onchange = e => { T.buff = +e.target.value; kaydet(); render(); };
