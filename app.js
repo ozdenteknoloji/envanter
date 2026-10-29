@@ -337,7 +337,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v8';
+const SURUM = 'v9';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -893,6 +893,18 @@ function irsaliyeDuzen() {
       toast('İrsaliye kaydedildi.'); S.irsTaslak = null; geri(); } catch (e) { hata(e); }
   };
 }
+function buffPanel() {
+  const sec = new Set(buffListe()); const aday = new Set([...BUFFLAR, ...sec]);
+  openSheet(`<h2>Buff seçenekleri</h2><p class="note">Sipariş ekranındaki buff listesinde hangi değerler (gün) çıksın? Dokunarak ekleyin ya da çıkarın. Listede olmayan bir değer isterseniz aşağıdan yazıp ekleyin.</p>
+    <div class="chips" id="bfC" style="flex-wrap:wrap"></div>
+    <label class="field"><span>Yeni değer (gün)</span><div style="display:flex;gap:8px"><input id="bfN" inputmode="decimal" placeholder="örn. 0,1 ya da 4" style="flex:1"><button class="btn alt" id="bfE" type="button" style="flex:0 0 auto">Ekle</button></div></label>
+    <div class="err" id="bfH"></div><div class="btns"><button class="btn" id="bfK">Kaydet</button></div>`, el => {
+    const ciz = () => { el.querySelector('#bfC').innerHTML = [...aday].sort((a, b) => a - b).map(b => `<button class="chip ${sec.has(b) ? 'on' : ''}" data-v="${b}">${yaz(b)}</button>`).join(''); el.querySelectorAll('#bfC [data-v]').forEach(c => c.onclick = () => { const v = +c.dataset.v; if (sec.has(v)) sec.delete(v); else sec.add(v); ciz(); }); }; ciz();
+    el.querySelector('#bfE').onclick = () => { const v = parseFloat(String(el.querySelector('#bfN').value).replace(',', '.')); if (!isFinite(v) || v < 0 || v > 20) { el.querySelector('#bfH').textContent = '0 ile 20 arasında bir sayı yazın.'; return; } el.querySelector('#bfH').textContent = ''; const r = Math.round(v * 100) / 100; aday.add(r); sec.add(r); el.querySelector('#bfN').value = ''; ciz(); };
+    el.querySelector('#bfK').onclick = async () => { if (!sec.size) { el.querySelector('#bfH').textContent = 'En az bir değer seçili olmalı.'; return; }
+      try { await setDoc(doc(db, 'genel', 'ayar'), { buff: [...sec].sort((a, b) => a - b) }, { merge: true }); closeSheet(); toast('Buff seçenekleri kaydedildi.'); render(); } catch (e) { hata(e); } };
+  });
+}
 function irsSaklaPanel() {
   openSheet(`<h2>Saklanacak irsaliye</h2><p class="note">Her şubede son kaç irsaliye saklansın? Yenisi kaydedilince en eskisi silinir. SKT ve atık hesabı sadece saklanan irsaliyelere bakar; haftada 2 sevkiyatta 5 irsaliye yaklaşık 2,5 haftayı kapsar (en uzun SKT 10 gün). 1–30 arası.</p>
     <label class="field"><span>İrsaliye sayısı</span><input id="isN" inputmode="numeric" pattern="[0-9]*" value="${irsSakla()}"></label><div class="err" id="isE"></div>
@@ -924,6 +936,8 @@ async function subeSil(id) {
 
 /* ================= Sipariş ================= */
 const BUFFLAR = [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+// Sipariş ekranındaki buff listesi Ayarlar → Sistem ayarları → Buff seçenekleri'nden seçilir (genel/ayar.buff); boşsa varsayılan liste
+const buffListe = () => { const l = S.ayar && Array.isArray(S.ayar.buff) ? S.ayar.buff.map(Number).filter(n => isFinite(n) && n >= 0 && n <= 20) : []; return [...new Set(l.length ? l : BUFFLAR)].sort((a, b) => a - b); };
 // Takvimdeki bir sonraki sipariş günleri (bugün dahil)
 function siparisGunleri(sb) {
   const t = sb.takvim || []; const bg = bugun(); const out = [];
@@ -952,7 +966,7 @@ function siparisEkrani() {
   const eskiSayim = !son || son.tarih < gunEkle(isGunu(), 0);
   $('#app').innerHTML = ust(`${sb.ad} · Sipariş`, { alt: `${trTarih(g.tarih)} siparişi · gün sayısı ${D}` }) + `<div class="pad sp">
     <div style="display:flex;gap:8px;align-items:center">${gunler.length > 1 ? `<div class="chips" style="flex:1;min-width:0">${gunler.slice(0, 4).map(x => `<button class="chip ${x.tarih === g.tarih ? 'on' : ''}" data-t="${x.tarih}">${trTarih(x.tarih).split(' ').slice(0, 3).join(' ')}</button>`).join('')}</div>` : '<div style="flex:1"></div>'}
-      <select id="spB" title="Buff (gün): hedef = ideal ÷ gün × (gün + buff)" style="flex:0 0 auto;padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:inherit;font-weight:700;font:inherit">${BUFFLAR.map(b => `<option value="${b}" ${b === buff ? 'selected' : ''}>Buff ${yaz(b)}</option>`).join('')}</select></div>
+      <select id="spB" title="Buff (gün): hedef = ideal ÷ gün × (gün + buff)" style="flex:0 0 auto;padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:inherit;font-weight:700;font:inherit">${[...new Set([...buffListe(), buff])].sort((a, b) => a - b).map(b => `<option value="${b}" ${b === buff ? 'selected' : ''}>Buff ${yaz(b)}</option>`).join('')}</select></div>
     <div class="card p" style="background:var(--blue-soft);border-color:transparent">Domino's'tan ideali <b style="color:var(--blue)">${trTarih(ar.bas)} – ${trTarih(ar.son)}</b> aralığıyla alın (${D} gün).</div>
     ${(() => { const bos = urs.filter(u => !(S.urunler[u].sKoli > 0)); return bos.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${bos.length} üründe sipariş kolisi boş</b><p class="note">${bos.map(u => esc(urunAd(u))).join(', ')}. Bu ürünlerde koli önerisi hesaplanmaz, yanlış sipariş vermemek için ${admin() ? 'Ayarlar → Ürünler\'den "Sipariş kolisi"ni doldurun.' : 'yöneticiye haber verin.'}</p></div>` : ''; })()}
     ${eskiSayim ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${son ? `Son sayım ${trTarih(son.tarih)}.` : 'Sayım yok.'}</b><p class="note">Siparişten önce bugünün günlük sayımını yapın; "Elde" sütunu son sayımdan gelir.</p></div>` : ''}
@@ -1065,9 +1079,10 @@ function sistemAyar() {
   $('#app').innerHTML = ust('Sistem ayarları', { geri: true, subeSecici: false }) + `<div class="pad"><div class="card">
       <button class="row" id="gAi"><div class="m"><b>Fotoğraf okuma (Gemini)</b><span>${S.ai.geminiKey ? 'Anahtar girildi · irsaliye fotoğrafları okunur' : 'Anahtar girilmedi · irsaliye sadece elle girilir'}</span></div><span class="ch">›</span></button>
       <button class="row" id="gIrs"><div class="m"><b>Saklanacak irsaliye</b><span>Her şubede son ${irsSakla()} irsaliye saklanır · SKT hesabı bunlara bakar</span></div><span class="ch">›</span></button>
+      <button class="row" id="gBuff"><div class="m"><b>Buff seçenekleri</b><span>${buffListe().map(yaz).join(' · ')}</span></div><span class="ch">›</span></button>
       <button class="row" id="seed2"><div class="m"><b>Excel'den ürün yükle</b><span>Serik Excel'indeki ürünler · olanlara dokunulmaz, eksikler eklenir</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
-  $('#gAi').onclick = aiPanel; $('#gIrs').onclick = irsSaklaPanel; $('#seed2').onclick = seedYukle;
+  $('#gAi').onclick = aiPanel; $('#gIrs').onclick = irsSaklaPanel; $('#gBuff').onclick = buffPanel; $('#seed2').onclick = seedYukle;
 }
 async function seedYukle() {
   const { SEED } = await import('./seed.js?v=11');
