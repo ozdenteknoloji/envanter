@@ -446,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v17';
+const SURUM = 'v18';
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
@@ -614,13 +614,14 @@ function editor() {
   if (fark) sol += ` · <a id="pGun">ayarlarda ${yaz(cs.y === 'koli' ? yeniC : yeniD)}, güncelle</a>`;
   const sonraki = k.satirlar[S.f.i + 1] ? urunAd(k.satirlar[S.f.i + 1].u) : (ks[ks.findIndex(x => x.id === k.id) + 1] ? '→ ' + ks[ks.findIndex(x => x.id === k.id) + 1].ad : 'bitti');
   const ilr = ilerleme(sy, sb);
-  $('#app').innerHTML = `<div class="ed">${ust(`${sb.ad} · ${TUR[sy.tur]} sayım`, { geri: true, alt: `${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır`, sag: (sy.durum === 'bitti' || kd ? '' : `<button id="bitirBtn" style="background:#fff;color:var(--blue)">Bitir</button>`) + `<button id="sonucBtn">Sonuç</button>` })}
+  $('#app').innerHTML = `<div class="ed">${ust(`${sb.ad} · ${TUR[sy.tur]} sayım`, { geri: true, alt: `${trTarih(sy.tarih)} · ${ilr.say}/${ilr.n} satır`, sag: (sy.durum === 'bitti' || kd ? '' : `<button id="bitirBtn" style="background:#fff;color:var(--blue)">Bitir</button>`) + `<button id="sonucBtn">Sonuç</button>` + (sy.durum === 'bitti' || kd ? '' : `<button id="syMenuBtn" aria-label="Diğer işlemler">⋯</button>`) })}
     <div class="ktabs">${tabs}${ayarTus}</div>
     <div class="edlist" id="edlist"><table class="et"><tr><th>Ürün</th><th>${k.satirlar.some(s => s.y === 'koli') ? 'Koli' : ''}${tartiVar ? (k.satirlar.some(s => s.y === 'koli') ? ' / ' : '') + 'Tartı' : ''}${!tartiVar && !k.satirlar.some(s => s.y === 'koli') ? 'Adet' : ''}</th><th>Toplam</th></tr>${rows}</table><div style="height:30px"></div></div>
     <div class="hint"><span>${sol}</span><span style="white-space:nowrap">Sonraki: <b>${esc(sonraki)}</b></span></div>
     ${kd ? kilitKart(kd) : sy.durum === 'bitti' ? `<div class="hint" style="flex-direction:column;align-items:stretch;gap:8px;padding:12px"><span><b style="color:var(--green)">✓ Sayım bitirildi</b> · ${esc(sy.bitiren || '')} ${saat(sy.bitis)} · ${ilr.say}/${ilr.n} satır sayıldı. Değiştirmek için tekrar açın.</span><button class="btn alt" id="acBtn">Sayımı tekrar aç</button></div>` : `<div class="kp">${['1', '2', '3', 'del', '4', '5', '6', 'ekstra', '7', '8', '9', 'geri', ',', '0', 'ileri'].map(x => `<button class="k ${x === 'del' || x === 'geri' ? 's' : ''} ${x === 'ekstra' ? 's ac' : ''} ${x === 'ileri' ? 'go' : ''}" data-key="${x}">${{ del: '⌫', ekstra: S.f.a === 'x' ? '✓ Ekstra' : '+ Ekstra', geri: '‹ Geri', ileri: 'İleri ›' }[x] || x}</button>`).join('')}`}</div></div>`;
   const el = $('#edlist'); el.scrollTop = eskiScroll;
   const bb = $('#bitirBtn'); if (bb) bb.onclick = () => sayimBitir(sy);
+  const sm = $('#syMenuBtn'); if (sm) sm.onclick = () => syMenuAc(sy);
   const ac = $('#acBtn'); if (ac) ac.onclick = () => { sy.durum = 'acik'; updateDoc(doc(db, 'sayimlar', sy.id), { durum: 'acik' }).catch(hata); editor(); };
   bagla(); $('#sonucBtn').onclick = () => go({ syId: null, tab: 'sayim', ar: 'sonuc', sonucId: sy.id });
   sekmeSurukle();
@@ -640,6 +641,43 @@ function editor() {
     else { sy.d ||= {}; (sy.d[k.id] ||= {})[cs.u] = yeniD; updateDoc(doc(db, 'sayimlar', sy.id), { [`d.${k.id}.${cs.u}`]: yeniD }).catch(hata); }
     editor(); };
 }
+/* Sayımı sıfırla: üst çubuktaki ⋯ menüsü (iki dokunuşlu) → "Sadece bu konum / Tüm sayım" seçimi. Silinenler önce Geçmiş'e yedeklenir. */
+function syMenuAc(sy) {
+  const top = $('.top'); if (!top) return; const var0 = top.querySelector('.syPop'); if (var0) { var0.remove(); return; }
+  const p = document.createElement('div'); p.className = 'syPop'; p.innerHTML = `<button id="syS">Sayımı sıfırla</button>`; top.appendChild(p);
+  let hazir = false, t;
+  const dis = e => { if (!p.contains(e.target) && e.target.id !== 'syMenuBtn') kapat(); };
+  const kapat = () => { clearTimeout(t); p.remove(); document.removeEventListener('pointerdown', dis, true); };
+  document.addEventListener('pointerdown', dis, true);
+  const b = p.querySelector('#syS');
+  b.onclick = () => {
+    if (!hazir) { hazir = true; b.classList.add('hazir'); b.innerHTML = 'Emin misin?<small>Devam etmek için tekrar dokun</small>'; clearTimeout(t); t = setTimeout(() => { hazir = false; b.classList.remove('hazir'); b.textContent = 'Sayımı sıfırla'; }, 2500); return; }
+    kapat(); sifirlaSecim(sy);
+  };
+}
+function sifirlaSecim(sy) {
+  const sb = sube(); if (!sb || !sy) return; const ks = kapsam(sb, sy.tur); const k = ks.find(x => x.id === S.ek) || ks[0]; if (!k) return;
+  const nK = k.satirlar.filter(s => sayildi(deger(sy, k.id, s.u))).length; const nT = ilerleme(sy, sb).say;
+  openSheet(`<h2>Neyi sıfırlayalım?</h2><p class="note" style="font-size:14px">Sıfırlanan değerler Geçmiş'te ${yedekGun()} gün saklanır.</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+      <button class="btn red" id="sK">Sadece ${esc(k.ad)} (${nK} satır)</button>
+      <button class="btn red" id="sT">Tüm sayım (${nT} satır)</button>
+      <button class="btn alt" id="sV">Vazgeç</button></div>`, el => {
+    el.querySelector('#sV').onclick = closeSheet;
+    const yap = tum => {
+      closeSheet(); S.buf = null;
+      yedekYaz('sayimlar/' + sy.id, true);
+      sy.son = new Date().toISOString(); sy.kim = benAd();
+      const upd = { son: sy.son, kim: sy.kim };
+      if (tum) { sy.v = {}; upd.v = deleteField(); } else { if (sy.v) delete sy.v[k.id]; upd['v.' + k.id] = deleteField(); }
+      updateDoc(doc(db, 'sayimlar', sy.id), upd).catch(hata);
+      const k0 = tum ? ks[0] : k; S.ek = k0.id; S.f = { k: k0.id, i: 0, a: 'm' };
+      toast(tum ? 'Tüm sayım sıfırlandı.' : `${k.ad} sıfırlandı.`); editor();
+    };
+    el.querySelector('#sK').onclick = () => yap(false);
+    el.querySelector('#sT').onclick = () => yap(true);
+  });
+}
 function konumMenusu() {
   commitBuf(); const h = aktifHucre(); const sid = S.subeId; const k = (sube().konumlar || []).find(x => x.id === S.ek); if (!k) return; const sy = syBul(S.syId);
   const cu = h && h.k.id === k.id ? h.s.u : null;
@@ -647,16 +685,11 @@ function konumMenusu() {
     <button class="row" id="mEkle"><div class="m"><b style="color:var(--blue)">+ ${esc(k.ad)}'e ürün ekle</b><span>Listeden seç, sona eklenir</span></div></button>
     ${cu ? `<button class="row" id="mCik"><div class="m"><b>${esc(urunAd(cu))} ürününü ${esc(k.ad)}'den çıkar</b><span>Şu an üzerinde durduğun ürün</span></div></button>` : ''}
     <button class="row" id="mDuz"><div class="m"><b>${esc(k.ad)} sırasını ve sayım şeklini düzenle</b><span>Sürükle-bırak, Koli / Tartı / Adet</span></div><span class="ch">›</span></button>
-    <button class="row" id="mSifT"><div class="m"><b style="color:var(--red)">Sayımı sıfırla</b><span>Bu sayımda şu ana kadar yazılan her rakam silinir</span></div></button>
+    <button class="row" id="mSifT"><div class="m"><b style="color:var(--red)">Sayımı sıfırla</b><span>Sadece bu konumu ya da tüm sayımı sıfırla</span></div></button>
     <button class="row" id="mYer"><div class="m"><b>Ürün yerleri tablosu</b><span>Bütün ürünler × bütün konumlar</span></div><span class="ch">›</span></button></div>
     <button class="btn alt" id="mKap" style="margin-top:6px">Kapat</button>`, el => {
     el.querySelector('#mKap').onclick = closeSheet;
-    const sifirla = async () => { if (!sy) return; closeSheet();
-      if (!(await onayla(`Bu sayımda şu ana kadar yazılan <b>her rakam silinecek</b>, sayım baştan başlayacak.`, 'Sıfırla'))) return;
-      sy.v = {};
-      sy.son = new Date().toISOString(); sy.kim = benAd();
-      updateDoc(doc(db, 'sayimlar', sy.id), { v: deleteField(), son: sy.son, kim: sy.kim }).catch(hata);
-      const ks = kapsam(sube(), sy.tur); const k0 = ks[0]; S.ek = k0.id; S.f = { k: k0.id, i: 0, a: 'm' }; S.buf = null; toast('Sayım sıfırlandı.'); editor(); };
+    const sifirla = () => { if (!sy) return; closeSheet(); sifirlaSecim(sy); };
     el.querySelector('#mSifT').onclick = sifirla;
     el.querySelector('#mDuz').onclick = () => { closeSheet(); go({ tab: 'ayarlar', syId: null, ar: `konum:${sid}:${k.id}` }); };
     el.querySelector('#mYer').onclick = () => { closeSheet(); go({ tab: 'ayarlar', syId: null, ar: `yerler:${sid}`, yerAra: '', yerFiltre: 'hepsi' }); };

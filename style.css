@@ -164,3 +164,8 @@ body.editing .toast{bottom:auto;top:calc(128px + env(safe-area-inset-top))}
 .login.orta{margin-top:0;min-height:calc(100vh - 40px);min-height:calc(100dvh - 40px);display:flex;flex-direction:column;justify-content:center}
 
 .st tr.pls td{color:var(--mut);background:var(--soft)}.st tr.pls td.v{font-weight:600}.sl .si.pls{background:var(--soft)}.sl .si.pls .nm{color:var(--mut)}
+
+.top .syPop{position:absolute;top:100%;right:12px;margin-top:4px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:4px;min-width:200px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:30}
+.top .syPop button{display:block;width:100%;text-align:left;background:none;color:var(--ink);border-radius:9px;padding:11px 12px;font-size:14px;font-weight:600}
+.top .syPop button small{display:block;font-size:12px;font-weight:500;margin-top:2px;opacity:.85}
+.top .syPop button.hazir{background:var(--red-soft);color:var(--red)}
