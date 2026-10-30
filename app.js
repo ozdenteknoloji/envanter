@@ -446,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v20';
+const SURUM = 'v21';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -1013,17 +1013,22 @@ Kurallar:
     clearInterval(zam); console.info('irsaliye okuma', Math.round((Date.now() - t0) / 1000), 'sn'); closeSheet(); go({ ar: 'irs' });
   } catch (e) { clearInterval(zam); console.error(e); if (e.code === 'iptal') { closeSheet(); return; } openSheet(`<h2>Okunamadı</h2><p class="note">${esc(AI_MESAJ[e.code] || hataMetni(e))}</p><div class="btns"><button class="btn alt" id="kp">Kapat</button></div>`, el => el.querySelector('#kp').onclick = closeSheet); }
 }
+// Aynı irsaliyenin ikinci kez eklenmesini engeller: aynı numara, ya da (numara farklı yazılmadıysa) aynı sevk tarihi ve aynı ürün/miktarlar
+function irsTekrar(T) {
+  const imza = l => (l || []).filter(k => k.u && k.miktar > 0).map(k => k.u + ':' + r6(k.miktar)).sort().join('|'); const mine = imza(T.kalemler);
+  return S.irsaliyeler.find(x => x.id !== T.id && ((T.no && x.no === T.no) || (mine && x.tarih === T.tarih && !(T.no && x.no && T.no !== x.no) && imza(x.kalemler) === mine))) || null;
+}
 function irsaliyeDuzen() {
   const T = S.irsTaslak; const sb = sube(); if (!T || !sb) { S.ar = null; return sktEkrani(); }
   const urs = sktUrunleri();
   const secenek = sel => `<option value="">— eşleşmedi —</option>` + urs.map(u => `<option value="${u.id}" ${u.id === sel ? 'selected' : ''}>${esc(u.ad)}</option>`).join('');
   const subeFarkli = T.okunanSube && !ascii(T.okunanSube).includes(ascii(sb.ad).split(' ')[0]) && !ascii(sb.ad).includes(ascii(T.okunanSube).split(' ')[0]);
-  const ayni = T.no && S.irsaliyeler.find(x => x.no === T.no && x.id !== T.id);
+  const ayni = irsTekrar(T);
   const uyar = []; // irsaliyedeki koli (sevk kolisi) sayımdaki koli/paketle aynı olmadığı için koli içi karşılaştırılmıyor
   const eslesmeyen = T.kalemler.filter(k => !k.u).length;
   $('#app').innerHTML = ust(T.id ? 'İrsaliye' : 'İrsaliye kontrol', { geri: true, subeSecici: false, alt: `${sb.ad} · ${T.kaynak === 'mail' ? 'mail' : T.kaynak === 'elle' ? 'elle giriş' : 'kağıt irsaliye'}` }) + `<div class="pad">
     ${subeFarkli ? `<div class="card p" style="background:var(--red-soft);border-color:transparent"><b style="color:var(--red)">Belgede şube "${esc(T.okunanSube)}" yazıyor, seçili şube ${esc(sb.ad)}.</b><p class="note">Yanlış şubeye kaydetmemek için üstten şubeyi değiştirin ya da emin olun.</p></div>` : ''}
-    ${ayni ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">Bu irsaliye (${esc(T.no)}) ${kisaT(ayni.tarih)} tarihinde zaten eklenmiş.</b></div>` : ''}
+    ${ayni ? `<div class="card p" style="background:var(--red-soft);border-color:transparent"><b style="color:var(--red)">Bu irsaliye zaten kayıtlı${ayni.no ? ` (${esc(ayni.no)})` : ''} · ${kisaT(ayni.tarih)} tarihli. Aynı irsaliye iki kez eklenemez.</b><p class="note">Numarayı ya da tarihi yanlış okunduysa düzeltin; değilse geri dönüp kayıtlı olanı açın.</p></div>` : ''}
     <div class="card p"><div class="grid2"><label class="field"><span>Sevk tarihi (SKT buradan başlar)</span><input type="date" id="irT" value="${T.tarih}"></label><label class="field"><span>İrsaliye / sipariş no</span><input id="irN" value="${esc(T.no)}"></label></div></div>
     ${uyar.map(w => `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">Koli içi değişmiş olabilir: ${esc(urunAd(w.u))}</b><p class="note">İrsaliyede koli başı ${yaz(w.oran)}, ayarlarda ${yaz(w.ki)}.</p>${admin() ? `<div class="btns"><button class="btn sm alt" data-kg="${w.u}" data-v="${w.oran}">Ürünler'de ${yaz(w.oran)} yap</button></div>` : ''}</div>`).join('')}
     <div class="sec">Ürünler (${T.kalemler.length})${eslesmeyen ? ` · <span style="color:var(--red)">${eslesmeyen} eşleşmedi</span>` : ''}</div>
@@ -1039,7 +1044,7 @@ function irsaliyeDuzen() {
     ${T.id ? '<div class="btns"><button class="btn red" id="irD">İrsaliyeyi sil</button></div>' : ''}</div>`;
   bagla();
   $('#irT').onchange = e => { T.tarih = e.target.value || T.tarih; render(); };
-  $('#irN').oninput = e => { T.no = e.target.value.trim(); };
+  $('#irN').oninput = e => { T.no = e.target.value.trim(); }; $('#irN').onchange = () => render();
   $('#app').querySelectorAll('.irU').forEach(x => x.onchange = () => { T.kalemler[+x.dataset.i].u = x.value || null; render(); });
   $('#app').querySelectorAll('.irM').forEach(x => x.onchange = () => { T.kalemler[+x.dataset.i].miktar = sayiOku(x.value); });
   $('#app').querySelectorAll('[data-sil]').forEach(x => x.onclick = () => { T.kalemler.splice(+x.dataset.sil, 1); render(); });
@@ -1049,6 +1054,7 @@ function irsaliyeDuzen() {
   $('#irK').onclick = async () => {
     const kalem = T.kalemler.filter(k => k.u && k.miktar > 0).map(k => ({ u: k.u, miktar: r6(k.miktar), ad: k.ad || '', koli: k.koli || null }));
     if (!kalem.length) return toast('Kaydedilecek ürün yok.', true);
+    if (irsTekrar(T)) { toast('Bu irsaliye zaten kayıtlı, tekrar eklenemez.', true); window.scrollTo(0, 0); return; }
     const id = T.id || yeniId('i'); const data = { sube: S.subeId, tarih: T.tarih, no: T.no || '', kaynak: T.kaynak || 'elle', kalemler: kalem, ekleyen: benAd(), zaman: new Date().toISOString() };
     const yeniEsl = {}; for (const k of T.kalemler) if (k.ad && k.u && k.u !== k.aiU) { const kk = eslKey(k.ad); if (kk) yeniEsl[`m.${kk}`] = k.u; }
     try { await setDoc(doc(db, 'irsaliyeler', id), data); if (Object.keys(yeniEsl).length) { const r = doc(db, 'genel', 'eslesme'); await updateDoc(r, yeniEsl).catch(() => setDoc(r, { m: Object.fromEntries(Object.entries(yeniEsl).map(([k, v]) => [k.slice(2), v])) }, { merge: true })); }
