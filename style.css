@@ -169,3 +169,10 @@ body.editing .toast{bottom:auto;top:calc(128px + env(safe-area-inset-top))}
 .top .syPop button{display:block;width:100%;text-align:left;background:none;color:var(--ink);border-radius:9px;padding:11px 12px;font-size:14px;font-weight:600}
 .top .syPop button small{display:block;font-size:12px;font-weight:500;margin-top:2px;opacity:.85}
 .top .syPop button.hazir{background:var(--red-soft);color:var(--red)}
+
+#updBar{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:center;gap:12px;background:var(--amber-soft);color:var(--amber);border-bottom:1px solid var(--amber);padding:calc(6px + env(safe-area-inset-top)) 12px 6px;font-size:13px;font-weight:700}
+#updBar button{border:0;border-radius:14px;background:var(--amber);color:var(--amber-soft);padding:5px 14px;font-weight:700;font-size:13px;cursor:pointer}
+body.upd{padding-top:calc(36px + env(safe-area-inset-top))}
+body.upd .top{top:calc(36px + env(safe-area-inset-top));padding-top:12px}
+body.upd .ed{top:calc(36px + env(safe-area-inset-top))}
+body.upd .ed .top{top:auto}

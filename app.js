@@ -446,7 +446,25 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v19';
+const SURUM = 'v20';
+/* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
+   Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
+function guncellemeKontrol() {
+  if (document.getElementById('updBar')) return;
+  fetch('index.html', { cache: 'no-store' }).then(r => r.text()).then(t => {
+    const m = t.match(/<script[^>]*type="module"[^>]*src="([^"]+)"/); const su = document.querySelector('script[type="module"][src]');
+    if (m && su && m[1] !== su.getAttribute('src')) guncellemeSerit();
+  }).catch(() => { });
+}
+function guncellemeSerit() {
+  if (document.getElementById('updBar')) return;
+  const d = document.createElement('div'); d.id = 'updBar'; d.innerHTML = `<span>Yeni sürüm var</span><button id="updBtn">Yenile</button>`;
+  document.body.appendChild(d); document.body.classList.add('upd');
+  document.getElementById('updBtn').onclick = () => { try { commitBuf(); } catch (e) { } setTimeout(() => location.reload(), 500); };
+}
+setTimeout(guncellemeKontrol, 20000); setInterval(guncellemeKontrol, 600000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') guncellemeKontrol(); });
+
 function hesapPaneli() {
   openSheet(`<h2>${esc(benAd())}</h2><p class="note">Kullanıcı adı: ${esc(S.me.kullaniciAdi || '')} · ${admin() ? 'Yönetici' : 'Şube hesabı'}</p>
     <div class="sec">Şifre değiştir</div>
