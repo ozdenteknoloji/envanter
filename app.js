@@ -446,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v22';
+const SURUM = 'v23';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -845,7 +845,7 @@ const irsSakla = () => Math.max(1, Math.min(30, parseInt(S.ayar && S.ayar.irsSak
 function eskiIrsaliyeleriSil() {
   if (!S.ayarYuklendi || S.irsaliyeler.length <= irsSakla()) return; // ayar gelmeden silinmez; S.irsaliyeler yeniden eskiye sıralı
   const eski = S.irsaliyeler.slice(irsSakla());
-  const b = writeBatch(db); eski.forEach(x => b.delete(doc(db, 'irsaliyeler', x.id))); b.commit().catch(() => { });
+  const b = writeBatch(db); eski.forEach(x => { b.delete(doc(db, 'irsaliyeler', x.id)); if (x.foto > 0) { b.delete(doc(db, 'irsaliyeFoto', x.id)); delete fotoOnb[x.id]; } }); b.commit().catch(() => { });
 }
 const _tpMemo = new Map();
 function toplamlar(sy) { const k = sy.id + '|' + sonZaman(sy) + '|' + S.subeId; if (!_tpMemo.has(k)) { if (_tpMemo.size > 50) _tpMemo.clear(); _tpMemo.set(k, urunToplamlari(sy, sube())); } return _tpMemo.get(k); }
@@ -909,7 +909,7 @@ function sktEkrani() {
   const kart = (renk, ic, u, alt, q) => `<div class="card" style="display:flex;gap:10px;padding:12px;align-items:center"><div style="width:34px;height:34px;border-radius:50%;background:${renk};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex:none">${ic}</div><div style="flex:1;min-width:0"><b>${esc(urunAd(u))}</b><div class="note" style="margin:2px 0 0">${alt}</div></div><div style="text-align:right"><b style="font-size:18px;color:${renk}">${fmt(q, S.urunler[u].birim)}</b><div class="note" style="margin:0">${birimK(u)}</div></div></div>`;
   const sec = (bas, l, f) => l.length ? `<div class="sec">${bas}</div>` + l.map(f).join('') : '';
   const son = [...S.sayimlar].sort((a, b) => sonZaman(b).localeCompare(sonZaman(a)))[0];
-  const irs = S.irsaliyeler.slice(0, irsSakla()).map(ir => `<button class="row" data-ir="${ir.id}"><div class="m"><b>${trTarih(ir.tarih)}</b><span>${esc(ir.no || 'numarasız')} · ${(ir.kalemler || []).length} kalem · ${esc(ir.ekleyen || '')}</span></div><span class="ch">›</span></button>`).join('');
+  const irs = S.irsaliyeler.slice(0, irsSakla()).map(ir => `<button class="row" data-ir="${ir.id}"><div class="m"><b>${trTarih(ir.tarih)}</b><span>${esc(ir.no || 'numarasız')} · ${(ir.kalemler || []).length} kalem · ${esc(ir.ekleyen || '')}</span></div>${ir.foto > 0 ? `<span class="fotoB" data-foto="${ir.id}" role="button" aria-label="Fotoğrafı aç">📷</span>` : ''}<span class="ch">›</span></button>`).join('');
   const hicbir = !atik.length && !bugunL.length && !yarinL.length && !yakin.length && !coz.length;
   $('#app').innerHTML = ust(`${sb.ad} · SKT`, { alt: `${kisaT(R)}${R !== bg ? ' (yarın)' : ''}'e göre · ${son ? 'son sayım ' + kisaT(son.tarih) + ' ' + saat(sonZaman(son)) : 'sayım yok'}` }) + `<div class="pad">
     ${eksikIrsKutusu(sb)}
@@ -926,7 +926,8 @@ function sktEkrani() {
     <div class="sec">İrsaliyeler (son ${irsSakla()})</div><div class="card">${irs || '<div class="empty" style="padding:20px">İrsaliye yok.</div>'}</div></div>`;
   bagla();
   $('#opBtn').onclick = ozetPaylas; $('#irEkle').onclick = irsaliyeEkle; if ($('#irEkleU')) $('#irEkleU').onclick = irsaliyeEkle;
-  $('#app').querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { const ir = S.irsaliyeler.find(x => x.id === b.dataset.ir); if (!ir) return; S.irsTaslak = { id: ir.id, tarih: ir.tarih, no: ir.no || '', kaynak: ir.kaynak, kalemler: (ir.kalemler || []).map(k => ({ ...k, gida: true })), digerleri: [] }; go({ ar: 'irs' }); });
+  $('#app').querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { const ir = S.irsaliyeler.find(x => x.id === b.dataset.ir); if (!ir) return; S.irsTaslak = { id: ir.id, fotoN: ir.foto || 0, tarih: ir.tarih, no: ir.no || '', kaynak: ir.kaynak, kalemler: (ir.kalemler || []).map(k => ({ ...k, gida: true })), digerleri: [] }; go({ ar: 'irs' }); });
+  $('#app').querySelectorAll('[data-foto]').forEach(b => b.onclick = e => { e.stopPropagation(); fotoAc(b.dataset.foto); });
 }
 // İrsaliyeden sadece SKT'si takip edilen ürünler (hamurlar, donuklar) okunur.
 const sktUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && u.sktGun && subedeGorunur(u.id, S.subeId));
@@ -1007,14 +1008,44 @@ Kurallar:
     for (const f of dosyalar) { ham += f.size; const k = await kucult(f); boyut += k.size; parts.push({ inline_data: { mime_type: k.type || 'image/jpeg', data: await b64(k) } }); }
     const kb = n => n > 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' MB' : Math.round(n / 1e3) + ' KB';
     const okA = $('#okA'); if (okA) okA.innerHTML = `Gemini'ye gönderildi (${kb(boyut)}${ham > boyut * 1.2 ? `, fotoğraf ${kb(ham)} idi` : ''}), okunuyor… Genelde birkaç saniye.`;
+    const fotoP = fotoHazirla(dosyalar); // saklanacak fotoğraf Gemini beklenirken hazırlanır
     const j = await gemini(parts); if (S.okumaIptal && S.okumaIptal.iptal) return;
     const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false && subedeGorunur(id, S.subeId)) adId[ascii(x.ad)] = id; });
     const kal = (j.kalemler || []).map(k => { const miktar = typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
       const baskaUrun = !u && k.urun && adId[ascii(k.urun)]; // listede var ama SKT takibi yok → atla
       return { ad: String(k.ad || '').trim(), miktar, u, aiU: u, gida: !baskaUrun }; }).filter(k => k.gida);
-    S.irsTaslak = { tarih: /^\d{4}-\d{2}-\d{2}$/.test(j.tarih || '') ? j.tarih : bugun(), no: String(j.no || ''), okunanSube: j.sube || '', kaynak: j.tur === 'mail' ? 'mail' : 'kagit', kalemler: kal, digerleri: [] };
+    S.irsTaslak = { tarih: /^\d{4}-\d{2}-\d{2}$/.test(j.tarih || '') ? j.tarih : bugun(), no: String(j.no || ''), okunanSube: j.sube || '', kaynak: j.tur === 'mail' ? 'mail' : 'kagit', kalemler: kal, digerleri: [], foto: await fotoP };
     clearInterval(zam); console.info('irsaliye okuma', Math.round((Date.now() - t0) / 1000), 'sn'); closeSheet(); go({ ar: 'irs' });
   } catch (e) { clearInterval(zam); console.error(e); if (e.code === 'iptal') { closeSheet(); return; } openSheet(`<h2>Okunamadı</h2><p class="note">${esc(AI_MESAJ[e.code] || hataMetni(e))}</p><div class="btns"><button class="btn alt" id="kp">Kapat</button></div>`, el => el.querySelector('#kp').onclick = closeSheet); }
+}
+// ===== İrsaliye fotoğrafı: küçültülüp 'irsaliyeFoto' koleksiyonunda irsaliyeyle aynı numarayla saklanır; irsaliye silinince birlikte silinir =====
+const fotoOnb = {};
+async function fotoKucult(f, kenar, kal) { const bmp = await createImageBitmap(f); const sc = Math.min(1, kenar / Math.max(bmp.width, bmp.height)); const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc); const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height); return await new Promise(r => c.toBlob(r, 'image/jpeg', kal)); }
+async function fotoHazirla(dosyalar) { // Firestore belge sınırı 1 MiB: toplam yaklaşık 880 KB'ı geçmeyene kadar kaliteyi düşürür
+  for (const [kn, kl] of [[1600, .7], [1400, .6], [1200, .55], [1000, .5], [800, .45]]) {
+    try { const l = []; let top = 0; for (const f of dosyalar) { const b = await b64(await fotoKucult(f, kn, kl)); top += b.length; l.push(b); } if (top <= 880000) return l; } catch (e) { return []; }
+  }
+  return [];
+}
+async function fotoYukle(id) { if (fotoOnb[id]) return fotoOnb[id]; const sn = await getDoc(doc(db, 'irsaliyeFoto', id)); const l = sn.exists() ? (sn.data().sayfalar || []) : []; if (l.length) fotoOnb[id] = l; return l; }
+// Tam ekran görüntüleyici: sağa sola kaydırarak şubenin fotoğrafı olan irsaliyeleri arasında gezilir. yerel = henüz kaydedilmemiş taslak
+function fotoAc(id, yerel) {
+  const liste = yerel ? [{ id: '_y', tarih: yerel.tarih, no: yerel.no, yerel: yerel.foto }] : S.irsaliyeler.filter(x => x.foto > 0);
+  if (!liste.length) return toast('Bu şubede kayıtlı irsaliye fotoğrafı yok.', true);
+  let cur = Math.max(0, liste.findIndex(x => x.id === id)); commitBuf(); gecmis.push({ tab: S.tab, ar: S.ar, syId: S.syId }); history.pushState({ n: gecmis.length }, '');
+  const el = document.createElement('div'); el.className = 'fv';
+  el.innerHTML = `<div class="fv-ust"><button class="fv-k" id="fvK" aria-label="Kapat">✕</button><div class="fv-b"><b id="fvT"></b><span id="fvA"></span></div><span class="fv-s" id="fvS"></span></div><div class="fv-sl" id="fvL">${liste.map(() => '<div class="fv-p"><div class="fv-yuk">Yükleniyor…</div></div>').join('')}</div>`;
+  $('#sheetRoot').replaceChildren(el); const L = el.querySelector('#fvL'), P = [...L.children]; const yuk = new Set();
+  const baslik = () => { const x = liste[cur]; el.querySelector('#fvT').textContent = trTarih(x.tarih); el.querySelector('#fvA').textContent = `${x.no || 'numarasız'} · ${sube()?.ad || ''}`; el.querySelector('#fvS').textContent = `${cur + 1} / ${liste.length}`; };
+  const doldur = async j => { if (j < 0 || j >= liste.length || yuk.has(j)) return; yuk.add(j); const x = liste[j]; let l = x.yerel; if (!l) { try { l = await fotoYukle(x.id); } catch (e) { l = null; yuk.delete(j); P[j].innerHTML = '<div class="fv-yuk">Fotoğraf yüklenemedi.</div>'; return; } }
+    P[j].innerHTML = l && l.length ? l.map(b => `<img alt="İrsaliye fotoğrafı" src="data:image/jpeg;base64,${b}">`).join('') : '<div class="fv-yuk">Bu irsaliyenin fotoğrafı bulunamadı.</div>';
+    P[j].querySelectorAll('img').forEach(im => im.onclick = () => P[j].classList.toggle('zoom')); };
+  baslik(); doldur(cur); doldur(cur - 1); doldur(cur + 1);
+  requestAnimationFrame(() => { L.scrollLeft = cur * L.clientWidth; });
+  L.onscroll = () => { const j = Math.round(L.scrollLeft / Math.max(1, L.clientWidth)); if (j !== cur && j >= 0 && j < liste.length) { cur = j; baslik(); doldur(j); doldur(j - 1); doldur(j + 1); } };
+  el.querySelector('#fvK').onclick = () => history.back();
+  const tus = e => { if (!el.isConnected) return document.removeEventListener('keydown', tus); if (e.key === 'ArrowRight' && cur < liste.length - 1) L.scrollTo({ left: (cur + 1) * L.clientWidth, behavior: 'smooth' }); if (e.key === 'ArrowLeft' && cur > 0) L.scrollTo({ left: (cur - 1) * L.clientWidth, behavior: 'smooth' }); if (e.key === 'Escape') history.back(); };
+  document.addEventListener('keydown', tus);
 }
 // Aynı irsaliyenin ikinci kez eklenmesini engeller: aynı numara, ya da (numara farklı yazılmadıysa) aynı sevk tarihi ve aynı ürün/miktarlar
 function irsTekrar(T) {
@@ -1029,17 +1060,15 @@ function irsaliyeDuzen() {
   const ayni = irsTekrar(T);
   const uyar = []; // irsaliyedeki koli (sevk kolisi) sayımdaki koli/paketle aynı olmadığı için koli içi karşılaştırılmıyor
   const eslesmeyen = T.kalemler.filter(k => !k.u).length;
-  $('#app').innerHTML = ust(T.id ? 'İrsaliye' : 'İrsaliye kontrol', { geri: true, subeSecici: false, alt: `${sb.ad} · ${T.kaynak === 'mail' ? 'mail' : T.kaynak === 'elle' ? 'elle giriş' : 'kağıt irsaliye'}` }) + `<div class="pad">
+  const fotoVar = (T.foto && T.foto.length) || T.fotoN > 0;
+  $('#app').innerHTML = ust(T.id ? 'İrsaliye' : 'İrsaliye kontrol', { geri: true, subeSecici: false, alt: `${sb.ad} · ${T.kaynak === 'mail' ? 'mail' : T.kaynak === 'elle' ? 'elle giriş' : 'kağıt irsaliye'}`, sag: (fotoVar ? '<button id="fotoBtn" title="İrsaliye fotoğrafı" aria-label="İrsaliye fotoğrafı">📷</button>' : '') + '<button id="hesapBtn" title="Hesap">☺</button>' }) + `<div class="pad">
     ${subeFarkli ? `<div class="card p" style="background:var(--red-soft);border-color:transparent"><b style="color:var(--red)">Belgede şube "${esc(T.okunanSube)}" yazıyor, seçili şube ${esc(sb.ad)}.</b><p class="note">Yanlış şubeye kaydetmemek için üstten şubeyi değiştirin ya da emin olun.</p></div>` : ''}
     ${ayni ? `<div class="card p" style="background:var(--red-soft);border-color:transparent"><b style="color:var(--red)">Bu irsaliye zaten kayıtlı${ayni.no ? ` (${esc(ayni.no)})` : ''} · ${kisaT(ayni.tarih)} tarihli. Aynı irsaliye iki kez eklenemez.</b><p class="note">Numarayı ya da tarihi yanlış okunduysa düzeltin; değilse geri dönüp kayıtlı olanı açın.</p></div>` : ''}
     <div class="card p"><div class="grid2"><label class="field"><span>Sevk tarihi (SKT buradan başlar)</span><input type="date" id="irT" value="${T.tarih}"></label><label class="field"><span>İrsaliye / sipariş no</span><input id="irN" value="${esc(T.no)}"></label></div></div>
     ${uyar.map(w => `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">Koli içi değişmiş olabilir: ${esc(urunAd(w.u))}</b><p class="note">İrsaliyede koli başı ${yaz(w.oran)}, ayarlarda ${yaz(w.ki)}.</p>${admin() ? `<div class="btns"><button class="btn sm alt" data-kg="${w.u}" data-v="${w.oran}">Ürünler'de ${yaz(w.oran)} yap</button></div>` : ''}</div>`).join('')}
     <div class="sec">Ürünler (${T.kalemler.length})${eslesmeyen ? ` · <span style="color:var(--red)">${eslesmeyen} eşleşmedi</span>` : ''}</div>
-    <div class="card">${T.kalemler.map((k, i) => `<div style="padding:10px 12px;border-bottom:1px solid var(--line);${k.u ? '' : 'background:var(--red-soft)'}">
-      ${k.ad ? `<div class="note" style="margin:0 0 4px">${esc(k.ad)}${k.koli ? ` · ${yaz(k.koli)} koli` : ''}</div>` : ''}
-      <div style="display:flex;gap:8px;align-items:center"><select data-i="${i}" class="irU" style="flex:1;min-width:0;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)">${secenek(k.u)}</select>
-      <input data-i="${i}" class="irM" inputmode="decimal" value="${yaz(k.miktar)}" style="width:76px;font:inherit;font-size:16px;padding:8px;border:1px solid var(--line);border-radius:8px;text-align:right;background:var(--surface);color:var(--ink)"><span class="note" style="width:28px;margin:0">${k.u ? birimK(k.u) : ''}</span><button class="x" data-sil="${i}">✕</button></div>
-      ${k.u && S.urunler[k.u].sktGun ? `<div class="note" style="margin:4px 0 0">SKT son gün: <b>${trTarih(gunEkle(T.tarih, S.urunler[k.u].sktGun))}</b>${S.urunler[k.u].cozulmeGun ? ` · ${trTarih(gunEkle(T.tarih, S.urunler[k.u].cozulmeGun))} sabahına kadar çözülür` : ''}</div>` : ''}</div>`).join('') || '<div class="empty" style="padding:20px">Kalem yok</div>'}</div>
+    <div class="irt"><div class="irt-h"><span>Ürün</span><span>Miktar</span></div>${T.kalemler.map((k, i) => { const u = k.u && S.urunler[k.u]; const coz = u && u.cozulmeGun ? `Çözülür: ${trTarih(gunEkle(T.tarih, u.cozulmeGun))} sabahına kadar` : '';
+      return `<div class="irr"><button class="irr-sil" data-sil="${i}">Sil</button><div class="irr-in ${k.u ? '' : 'yok'}"><div class="irr-r"><button class="irr-ad" data-sec="${i}">${esc(k.u ? urunAd(k.u) : (k.ad || 'Ürün seç'))}</button><input data-i="${i}" class="irM" inputmode="decimal" value="${yaz(k.miktar)}" aria-label="Miktar"><span class="irr-b">${k.u ? birimK(k.u) : ''}</span><button class="x irr-x" data-sil="${i}" aria-label="Satırı sil">✕</button></div>${k.u ? '' : '<div class="irr-n w">Eşleşmedi · ürün seçmek için dokunun ›</div>'}${coz ? `<div class="irr-n">${coz}</div>` : ''}</div></div>`; }).join('') || '<div class="empty" style="padding:20px">Kalem yok</div>'}</div>
     <div class="btns" style="margin-top:0"><button class="btn alt" id="irS">+ Satır ekle</button></div>
     ${T.digerleri.length ? `<details class="card" style="margin-top:10px"><summary class="row" style="list-style:none"><div class="m"><b>Gıda dışı ${T.digerleri.length} kalem atlandı</b><span>${esc(T.digerleri.map(k => k.ad).join(', '))}</span></div></summary></details>` : ''}
     <p class="note">Sadece SKT'si takip edilen ürünler listelenir. Eşleşmeyen satırlar kaydedilmez. Elle eşleştirdiğiniz adlar bir sonraki irsaliyede kendiliğinden tanınır.</p>
@@ -1048,20 +1077,29 @@ function irsaliyeDuzen() {
   bagla();
   $('#irT').onchange = e => { T.tarih = e.target.value || T.tarih; render(); };
   $('#irN').oninput = e => { T.no = e.target.value.trim(); }; $('#irN').onchange = () => render();
-  $('#app').querySelectorAll('.irU').forEach(x => x.onchange = () => { T.kalemler[+x.dataset.i].u = x.value || null; render(); });
+  const fb = $('#fotoBtn'); if (fb) fb.onclick = () => T.id ? fotoAc(T.id) : fotoAc(null, T);
+  $('#app').querySelectorAll('[data-sec]').forEach(x => x.onclick = () => { const k = T.kalemler[+x.dataset.sec];
+    openSheet(`<h2>Ürün seç</h2>${k.ad ? `<p class="note">İrsaliyede: ${esc(k.ad)}</p>` : ''}<div class="card" style="margin-top:8px">${urs.map(u => `<button class="row" data-u="${u.id}"><div class="m"><b>${esc(u.ad)}</b></div><span class="ch" style="color:var(--blue);font-weight:800">${u.id === k.u ? '✓' : ''}</span></button>`).join('')}</div><div class="btns"><button class="btn alt" id="uYok">Eşleşmedi olarak bırak</button></div>`, el => {
+      el.querySelectorAll('[data-u]').forEach(b => b.onclick = () => { k.u = b.dataset.u; closeSheet(); render(); }); el.querySelector('#uYok').onclick = () => { k.u = null; closeSheet(); render(); }; }); });
+  $('#app').querySelectorAll('.irr').forEach(r => { const inn = r.querySelector('.irr-in'); let x0 = null, y0 = 0, dx = 0, yatay = null; // sola kaydırınca "Sil" açılır
+    r.addEventListener('touchstart', e => { const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; dx = 0; yatay = null; inn.style.transition = 'none'; }, { passive: true });
+    r.addEventListener('touchmove', e => { if (x0 == null) return; const t = e.touches[0]; const mx = t.clientX - x0, my = t.clientY - y0; if (yatay == null && (Math.abs(mx) > 8 || Math.abs(my) > 8)) yatay = Math.abs(mx) > Math.abs(my); if (!yatay) return; dx = Math.max(-84, Math.min(0, (r.classList.contains('ac') ? -84 : 0) + mx)); inn.style.transform = `translateX(${dx}px)`; }, { passive: true });
+    r.addEventListener('touchend', () => { if (x0 == null) return; x0 = null; inn.style.transition = ''; if (!yatay) return; const ac = dx < -42; r.classList.toggle('ac', ac); inn.style.transform = ac ? 'translateX(-84px)' : ''; $('#app').querySelectorAll('.irr.ac').forEach(o => { if (o !== r) { o.classList.remove('ac'); o.querySelector('.irr-in').style.transform = ''; } }); }); });
   $('#app').querySelectorAll('.irM').forEach(x => x.onchange = () => { T.kalemler[+x.dataset.i].miktar = sayiOku(x.value); });
   $('#app').querySelectorAll('[data-sil]').forEach(x => x.onclick = () => { T.kalemler.splice(+x.dataset.sil, 1); render(); });
   $('#app').querySelectorAll('[data-kg]').forEach(x => x.onclick = () => { updateDoc(doc(db, 'genel', 'urunler'), { [`u.${x.dataset.kg}.koliIci`]: +x.dataset.v }).then(() => toast('Koli içi güncellendi.')).catch(hata); });
   $('#irS').onclick = () => { T.kalemler.push({ ad: '', miktar: null, u: null, gida: true }); render(); window.scrollTo(0, document.body.scrollHeight); };
-  const d = $('#irD'); if (d) d.onclick = async () => { if (!(await onayla('Bu irsaliye silinecek; SKT hesabından çıkar.', 'Sil'))) return; deleteDoc(doc(db, 'irsaliyeler', T.id)).catch(hata); S.irsTaslak = null; geri(); };
+  const d = $('#irD'); if (d) d.onclick = async () => { if (!(await onayla('Bu irsaliye silinecek; SKT hesabından çıkar.', 'Sil'))) return; deleteDoc(doc(db, 'irsaliyeler', T.id)).catch(hata); if (T.fotoN > 0) { deleteDoc(doc(db, 'irsaliyeFoto', T.id)).catch(() => { }); delete fotoOnb[T.id]; } S.irsTaslak = null; geri(); };
   $('#irK').onclick = async () => {
     const kalem = T.kalemler.filter(k => k.u && k.miktar > 0).map(k => ({ u: k.u, miktar: r6(k.miktar), ad: k.ad || '', koli: k.koli || null }));
     if (!kalem.length) return toast('Kaydedilecek ürün yok.', true);
     if (irsTekrar(T)) { toast('Bu irsaliye zaten kayıtlı, tekrar eklenemez.', true); window.scrollTo(0, 0); return; }
-    const id = T.id || yeniId('i'); const data = { sube: S.subeId, tarih: T.tarih, no: T.no || '', kaynak: T.kaynak || 'elle', kalemler: kalem, ekleyen: benAd(), zaman: new Date().toISOString() };
+    const id = T.id || yeniId('i'); let fotoN = T.fotoN || 0, fotoUyari = false;
+    if (T.foto && T.foto.length) { try { await setDoc(doc(db, 'irsaliyeFoto', id), { sube: S.subeId, sayfalar: T.foto, zaman: new Date().toISOString() }); fotoN = T.foto.length; fotoOnb[id] = T.foto; } catch (e) { console.error(e); fotoUyari = true; } }
+    const data = { sube: S.subeId, tarih: T.tarih, no: T.no || '', kaynak: T.kaynak || 'elle', kalemler: kalem, ekleyen: benAd(), zaman: new Date().toISOString(), foto: fotoN };
     const yeniEsl = {}; for (const k of T.kalemler) if (k.ad && k.u && k.u !== k.aiU) { const kk = eslKey(k.ad); if (kk) yeniEsl[`m.${kk}`] = k.u; }
     try { await setDoc(doc(db, 'irsaliyeler', id), data); if (Object.keys(yeniEsl).length) { const r = doc(db, 'genel', 'eslesme'); await updateDoc(r, yeniEsl).catch(() => setDoc(r, { m: Object.fromEntries(Object.entries(yeniEsl).map(([k, v]) => [k.slice(2), v])) }, { merge: true })); }
-      toast('İrsaliye kaydedildi.'); S.irsTaslak = null; geri(); } catch (e) { hata(e); }
+      toast(fotoUyari ? 'İrsaliye kaydedildi ama fotoğrafı saklanamadı (Firestore kuralına irsaliyeFoto eklendi mi?).' : 'İrsaliye kaydedildi.', fotoUyari); S.irsTaslak = null; geri(); } catch (e) { hata(e); }
   };
 }
 // Ana malzeme ek buffı: Ayarlar → Sistem ayarları → Ana malzeme buffı (genel/ayar: anaBuff gün, anaUrunler ürün id'leri)
@@ -1123,7 +1161,7 @@ async function subeSil(id) {
   if (!(await onayla(`<b>${esc(s.ad)}</b> şubesi, ayarları, sayımları ve irsaliyeleri kalıcı olarak silinecek. Geri alınamaz.`, 'Sil'))) return;
   try {
     const b = writeBatch(db); b.delete(doc(db, 'subeler', id));
-    for (const c of ['sayimlar', 'irsaliyeler']) (await getDocs(query(collection(db, c), where('sube', '==', id)))).forEach(d => b.delete(d.ref));
+    for (const c of ['sayimlar', 'irsaliyeler', 'irsaliyeFoto']) (await getDocs(query(collection(db, c), where('sube', '==', id)))).forEach(d => b.delete(d.ref));
     for (const u of S.kullanicilar) if ((u.subeler || []).includes(id)) b.update(doc(db, 'kullanicilar', u.uid), { subeler: u.subeler.filter(x => x !== id) });
     await b.commit(); toast(`${s.ad} silindi.`); geri();
   } catch (e) { hata(e); }
