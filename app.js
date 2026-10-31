@@ -446,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v21';
+const SURUM = 'v22';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -522,11 +522,13 @@ function grupSirala(k, sat) { return k.gruplu ? [...sat.filter(x => x.g !== 'i')
 const deger = (sy, k, u) => (sy.v && sy.v[k] && sy.v[k][u]) || {};
 const satirDara = s => s.d ?? S.urunler[s.u]?.dara ?? null;
 const koliIci = (sid, u) => { const o = S.subeler[sid]?.koliIci?.[u]; return o != null ? o : (S.urunler[u]?.koliIci ?? null); }; // şubede farklıysa o, değilse genel
+const satirKoli = (sid, s) => s.c != null ? s.c : koliIci(sid, s.u); // konum satırında özel gramaj varsa o, yoksa şube/genel
 const subedeGorunur = (u, sid) => { const x = S.urunler[u]; return !!x && (!x.sube || x.sube === sid); }; // şubenin konum satırındaki dara (eski kayıtlarda üründeki)
 function prm(sy, s, k) {
   const p = (sy.p && sy.p[s.u]) || null; const ur = S.urunler[s.u] || {};
   const dSy = sy.d && sy.d[k] && sy.d[k][s.u];
-  return { c: (p && p.c != null ? p.c : koliIci(sy.sube, s.u)) ?? 1, d: (dSy != null ? dSy : (p && p.d != null ? p.d : satirDara(s))) ?? 0 };
+  const cSy = sy.kc && sy.kc[k] && sy.kc[k][s.u]; // bu sayımda bu konum için sabitlenen koli içi
+  return { c: (cSy != null ? cSy : (p && p.c != null ? p.c : koliIci(sy.sube, s.u))) ?? 1, d: (dSy != null ? dSy : (p && p.d != null ? p.d : satirDara(s))) ?? 0 };
 }
 const sayildi = v => v.m != null || v.x != null;
 function satirToplam(sy, k, s) {
@@ -584,7 +586,8 @@ async function sayimBaslat(tur) {
   if (syBul(id)) return go({ syId: id });
   const p = {}; for (const u of Object.keys(S.urunler)) p[u] = { c: koliIci(S.subeId, u) };
   const d = {}; for (const k of sube().konumlar || []) for (const s of k.satirlar || []) if (s.y === 'tarti') (d[k.id] ||= {})[s.u] = satirDara(s);
-  const data = { sube: S.subeId, tarih: isGunu(), tur, basla: new Date().toISOString(), baslatan: benAd(), kim: benAd(), v: {}, t: {}, p, d };
+  const kc = {}; for (const k of sube().konumlar || []) for (const s of k.satirlar || []) if (s.y === 'koli' && s.c != null) (kc[k.id] ||= {})[s.u] = s.c;
+  const data = { sube: S.subeId, tarih: isGunu(), tur, basla: new Date().toISOString(), baslatan: benAd(), kim: benAd(), v: {}, t: {}, p, d, kc };
   S.sayimlar.unshift({ id, ...data });
   setDoc(doc(db, 'sayimlar', id), data).catch(hata);
   go({ syId: id });
@@ -628,7 +631,7 @@ function editor() {
   else if (cs.y === 'tarti') { const v = deger(sy, k.id, cs.u); sol += `dara ${yaz(pr.d)} kg` + (v.m != null ? ` · ${yaz(v.m)} − ${yaz(pr.d)} = <b>${fmt(satirToplam(sy, k.id, cs) - (v.x ?? 0))}</b>` : ''); }
   else sol += 'adet sayılır';
   const guncel = S.urunler[cs.u] || {}; const yeniD = satirDara(cs);
-  const yeniC = koliIci(sy.sube, cs.u); const fark = (cs.y === 'koli' && sy.p && sy.p[cs.u] && yeniC !== (sy.p[cs.u].c ?? null)) || (cs.y === 'tarti' && (yeniD ?? 0) !== pr.d);
+  const yeniC = satirKoli(sy.sube, cs); const fark = (cs.y === 'koli' && (yeniC ?? 1) !== pr.c) || (cs.y === 'tarti' && (yeniD ?? 0) !== pr.d);
   if (fark) sol += ` · <a id="pGun">ayarlarda ${yaz(cs.y === 'koli' ? yeniC : yeniD)}, güncelle</a>`;
   const sonraki = k.satirlar[S.f.i + 1] ? urunAd(k.satirlar[S.f.i + 1].u) : (ks[ks.findIndex(x => x.id === k.id) + 1] ? '→ ' + ks[ks.findIndex(x => x.id === k.id) + 1].ad : 'bitti');
   const ilr = ilerleme(sy, sb);
@@ -655,7 +658,7 @@ function editor() {
     clearTimeout(S.ayarT); S.ayarHazir = false; editor(); konumMenusu();
   };
   const pg = $('#pGun'); if (pg) pg.onclick = () => {
-    if (cs.y === 'koli') { sy.p[cs.u] = { c: yeniC }; updateDoc(doc(db, 'sayimlar', sy.id), { ['p.' + cs.u]: sy.p[cs.u] }).catch(hata); }
+    if (cs.y === 'koli') { sy.kc ||= {}; (sy.kc[k.id] ||= {})[cs.u] = yeniC; updateDoc(doc(db, 'sayimlar', sy.id), { [`kc.${k.id}.${cs.u}`]: yeniC == null ? deleteField() : yeniC }).catch(hata); }
     else { sy.d ||= {}; (sy.d[k.id] ||= {})[cs.u] = yeniD; updateDoc(doc(db, 'sayimlar', sy.id), { [`d.${k.id}.${cs.u}`]: yeniD }).catch(hata); }
     editor(); };
 }
@@ -1359,7 +1362,7 @@ function konumAyar(sid, kid) {
   const sat = grupSirala(k, k.satirlar || []); const nU = k.gruplu ? sat.filter(x => x.g !== 'i').length : sat.length;
   $('#app').innerHTML = ust(k.ad, { geri: true, subeSecici: false, alt: `${s.ad} · ${sat.length} ürün` }) + `<div class="pad">
     <p class="note" style="margin:0 0 8px">Sayımdaki sırayı raf sırasına göre sürükleyerek dizin. <b>Koli</b>: koli × koli içi · <b>Tartı</b>: brüt kg − kap darası (bu şubeye özel, dokunup düzeltin; iki kap kullanılıyorsa toplam darayı yazın) · <b>Adet</b>: tek tek sayılır.</p>
-    <div class="card sl" id="ul">${sat.map((x, i) => { const u = S.urunler[x.u]; return (k.gruplu && i === nU ? '<div class="si sep"><span class="drag" style="display:none"></span><b>İÇECEKLER</b><small>ürünü buraya sürükle / buradan çıkar</small></div>' : '') + `<div class="si"><span class="drag">≡</span><div class="nm">${esc(u?.ad || '(silinmiş ürün)')}<small>${x.y === 'koli' ? `<a class="dl" data-koli="${x.u}">koli içi ${yaz(koliIci(sid, x.u) ?? 1)}${s.koliIci?.[x.u] != null ? ' · bu şubeye özel' : ''} ✎</a>` : x.y === 'tarti' ? (satirDara(x) != null ? `<a class="dl" data-dara="${i}">kap darası ${yaz(satirDara(x))} kg ✎</a>` : `<a class="dl" data-dara="${i}" style="color:var(--red)">kap darası girilmemiş ✎</a>`) : 'adet'}</small></div>
+    <div class="card sl" id="ul">${sat.map((x, i) => { const u = S.urunler[x.u]; return (k.gruplu && i === nU ? '<div class="si sep"><span class="drag" style="display:none"></span><b>İÇECEKLER</b><small>ürünü buraya sürükle / buradan çıkar</small></div>' : '') + `<div class="si"><span class="drag">≡</span><div class="nm">${esc(u?.ad || '(silinmiş ürün)')}<small>${x.y === 'koli' ? `<a class="dl" data-koli="${x.u}">koli içi ${yaz(satirKoli(sid, x) ?? 1)}${x.c != null ? ' · bu konuma özel' : s.koliIci?.[x.u] != null ? ' · bu şubeye özel' : ''} ✎</a>` : x.y === 'tarti' ? (satirDara(x) != null ? `<a class="dl" data-dara="${i}">kap darası ${yaz(satirDara(x))} kg ✎</a>` : `<a class="dl" data-dara="${i}" style="color:var(--red)">kap darası girilmemiş ✎</a>`) : 'adet'}</small></div>
       <span class="seg">${['koli', 'tarti', 'adet'].map(y => `<button data-i="${i}" data-y="${y}" class="${x.y === y ? 'on' : ''}">${YON[y]}</button>`).join('')}</span><button class="x" data-sil="${i}">✕</button></div>`; }).join('') + (k.gruplu && nU === sat.length ? '<div class="si sep"><span class="drag" style="display:none"></span><b>İÇECEKLER</b><small>ürünü buraya sürükle</small></div>' : '') || '<div class="empty" style="padding:20px">Ürün yok</div>'}</div>
     <div class="card"><button class="row" id="kGrup"><div class="m"><b>İçecek bölümü</b><span>${k.gruplu ? 'Açık · sayımda ürünler ve içecekler ayrı başlıkta' : 'Kapalı · tek liste'}</span></div><span class="tag ${k.gruplu ? 'g' : ''}">${k.gruplu ? 'Açık' : 'Kapalı'}</span></button></div>
     <div class="btns"><button class="btn" id="uEkle">+ Ürün ekle</button></div>
@@ -1367,7 +1370,7 @@ function konumAyar(sid, kid) {
   bagla();
   $('#app').querySelectorAll('[data-y]').forEach(b => b.onclick = () => { const n = sat.map((x, i) => i === +b.dataset.i ? { ...x, y: b.dataset.y } : x); kaydet(n); render(); });
   $('#app').querySelectorAll('[data-sil]').forEach(b => b.onclick = () => { const n = sat.filter((x, i) => i !== +b.dataset.sil); kaydet(n); render(); });
-  $('#app').querySelectorAll('[data-koli]').forEach(a => a.onclick = () => koliIciPanel(sid, a.dataset.koli));
+  $('#app').querySelectorAll('[data-koli]').forEach(a => a.onclick = () => koliIciPanel(sid, a.dataset.koli, kid));
   $('#app').querySelectorAll('[data-dara]').forEach(a => a.onclick = () => { const i = +a.dataset.dara; const x = sat[i];
     openSheet(`<h2>${esc(urunAd(x.u))}</h2><p class="note">${esc(s.ad)} · ${esc(k.ad)} kabının darası. Her şubenin kabı farklı olabilir; sadece bu şubeyi etkiler.</p><label class="field"><span>Kap darası (kg)</span><input id="dd" inputmode="decimal" value="${yaz(satirDara(x))}" placeholder="örn. 0,356"></label><div class="btns"><button class="btn" id="dk">Kaydet</button></div>`, el => {
       el.querySelector('#dd').focus(); el.querySelector('#dk').onclick = () => { const v = sayiOku(el.querySelector('#dd').value); kaydet(sat.map((y, j) => j === i ? { ...y, d: v } : y)); closeSheet(); render(); }; }); });
@@ -1380,14 +1383,18 @@ function konumAyar(sid, kid) {
   if (admin()) $('#kAd').onclick = () => openSheet(`<h2>Konum adı</h2><label class="field"><span>Ad</span><input id="ka" value="${esc(k.ad)}"></label><div class="btns"><button class="btn" id="kk">Kaydet</button></div>`, el => { el.querySelector('#kk').onclick = () => { const ad = el.querySelector('#ka').value.trim(); if (!ad) return; subeKaydet(sid, { konumlar: ks.map(x => x.id === kid ? { ...x, ad } : x) }); closeSheet(); }; });
   if (admin()) $('#kSil').onclick = async () => { if (!(await onayla(`"${k.ad}" konumu ve içindeki ${sat.length} ürün satırı silinecek. Geçmiş sayımlar etkilenmez.`, 'Sil'))) return; subeKaydet(sid, { konumlar: ks.filter(x => x.id !== kid) }); geri(); };
 }
-function koliIciPanel(sid, u) {
+function koliIciPanel(sid, u, kid) {
   const s = S.subeler[sid]; const genel = S.urunler[u]?.koliIci; const oz = s.koliIci?.[u];
-  openSheet(`<h2>${esc(urunAd(u))}</h2><p class="note">Genel koli içi: <b>${genel != null ? yaz(genel) : 'yok'}</b> (Ürünler'den değişir). Bu bölgeye farklı gramajda geliyorsa sadece <b>${esc(s.ad)}</b> için ayrı değer yazın.</p>
+  const kn = (s.konumlar || []).find(x => x.id === kid); const kx = kn?.satirlar?.find(x => x.u === u); const ko = kx?.c;
+  openSheet(`<h2>${esc(urunAd(u))}</h2><p class="note">Genel koli içi: <b>${genel != null ? yaz(genel) : 'yok'}</b> (Ürünler'den değişir). Farklı gramajda geliyorsa <b>${esc(s.ad)}</b> için ayrı değer yazın.</p>
     <label class="field"><span>${esc(s.ad)} için koli içi</span><input id="ki" inputmode="decimal" value="${yaz(oz ?? genel)}"></label>
+    ${kn ? `<p class="note">Aynı ürün <b>${esc(kn.ad)}</b> konumunda başka gramajla sayılıyorsa (örn. dilim) sadece bu konuma özel değer yazın. Boş bırakırsanız şube değeri kullanılır.</p>
+    <label class="field"><span>${esc(kn.ad)} için koli içi</span><input id="kk2" inputmode="decimal" value="${ko != null ? yaz(ko) : ''}" placeholder="boş = şube değeri"></label>` : ''}
     <div class="btns">${oz != null ? '<button class="btn alt" id="kg">Genel değere dön</button>' : ''}<button class="btn" id="kk">Kaydet</button></div>`, el => {
-    const yazK = v => { const k = { ...(s.koliIci || {}) }; if (v == null || v === genel) delete k[u]; else k[u] = v; s.koliIci = k; subeKaydet(sid, { koliIci: k }); closeSheet(); render(); };
-    el.querySelector('#kk').onclick = () => yazK(sayiOku(el.querySelector('#ki').value));
-    const g = el.querySelector('#kg'); if (g) g.onclick = () => yazK(null);
+    const yazK = v => { const k = { ...(s.koliIci || {}) }; if (v == null || v === genel) delete k[u]; else k[u] = v; s.koliIci = k; subeKaydet(sid, { koliIci: k }); };
+    const yazKonum = v => { const yeni = (s.konumlar || []).map(x => x.id !== kid ? x : { ...x, satirlar: (x.satirlar || []).map(y => { if (y.u !== u) return y; const { c, ...r } = y; return v == null ? r : { ...r, c: v }; }) }); s.konumlar = yeni; subeKaydet(sid, { konumlar: yeni }); };
+    el.querySelector('#kk').onclick = () => { yazK(sayiOku(el.querySelector('#ki').value)); const kv = el.querySelector('#kk2'); if (kv) yazKonum(sayiOku(kv.value)); closeSheet(); render(); };
+    const g = el.querySelector('#kg'); if (g) g.onclick = () => { yazK(null); closeSheet(); render(); };
   });
 }
 function urunSecici(haric, bitti, sid) {
