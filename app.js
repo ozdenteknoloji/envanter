@@ -446,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v25';
+const SURUM = 'v26';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -940,7 +940,7 @@ function irsaliyeEkle() {
     for (const f of [el.querySelector('#irF'), el.querySelector('#irK')]) if (f) f.onchange = () => { const fs = [...f.files]; if (fs.length) irsaliyeOku(fs); };
   });
 }
-async function kucult(blob) { try { const bmp = await createImageBitmap(blob); const sc = Math.min(1, 1280 / Math.max(bmp.width, bmp.height)); if (sc >= 1 && blob.size < 400e3 && /jpeg|webp/.test(blob.type)) return blob; const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); return await new Promise(r => c.toBlob(r, 'image/jpeg', .72)); } catch (e) { return blob; } }
+async function kucult(blob, kenar = 1280, kal = .72, kucukSiniri = 400e3) { try { const bmp = await createImageBitmap(blob); const sc = Math.min(1, kenar / Math.max(bmp.width, bmp.height)); if (sc >= 1 && blob.size < kucukSiniri && /jpeg|webp/.test(blob.type)) return blob; const c = document.createElement('canvas'); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); return await new Promise(r => c.toBlob(r, 'image/jpeg', kal)); } catch (e) { return blob; } }
 const b64 = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(blob); });
 function aiHata(code, msg) { const e = new Error(msg || code); e.code = code; return e; }
 // Hız için "düşünme" kapatılır; model desteklemiyorsa bir sonraki ayarla tekrar denenir.
@@ -996,24 +996,35 @@ async function irsaliyeOku(dosyalar) {
   try {
     const urunAdlari = sktUrunleri().map(u => u.ad);
     const prompt = `Bu görüntü(ler) Domino's Pizza şubesine gelen bir sevkiyatın belgesidir: ya kağıt e-İrsaliye ya da 3SC "siparişiniz teslim edildi" e-postasının ekran görüntüsü.
-Sadece aşağıdaki ürün listemizde karşılığı olan kalemleri oku (hamurlar, tabanlar ve son kullanma tarihi takip edilen donuk ürünler). Listede karşılığı olmayan bütün kalemleri (içecekler, soslar, kutular, kağıtlar, temizlik, kıyafet, nakliye vb.) tamamen atla, yazma.
+Tablodaki BÜTÜN satırları, yukarıdan aşağıya sırayla, hiçbirini atlamadan yaz (ürün listemizde olmasa da). Fotoğraf eğik ya da perspektifli çekilmiş olabilir: bir satırın sayılarını, o ürün adıyla AYNI yatay satırdaki hücrelerden oku; yandaki ya da alttaki satırın sayısını karıştırma. Ürün adının solundaki "Sıra No" ve "Malzeme Kodu" ile sağdaki sayıları aynı satırda eşleştir.
 Sadece şu JSON'u döndür:
-{"tur":"irsaliye" ya da "mail","sube":"belgedeki şube adı (ör. SERİK)","tarih":"YYYY-AA-GG","no":"irsaliye no ya da sipariş no","kalemler":[{"ad":"belgede yazdığı gibi ürün adı","tob":"TÖB Miktarı sütunundaki sayı","sob":"SÖB Miktar sütunundaki yazı (ör. 50 KS)","miktar":"tob ile aynı sayı","urun":"listemizdeki ürün adı"}]}
+{"tur":"irsaliye" ya da "mail","sube":"belgedeki şube adı (ör. SERİK)","tarih":"YYYY-AA-GG","no":"irsaliye no ya da sipariş no","kalemler":[{"sira":"Sıra No","kod":"Malzeme Kodu","ad":"belgede yazdığı gibi ürün adı","tob":"TÖB Miktarı sütunundaki sayı","birim":"TÖB'ün yanındaki birim (ADET, KG…)","sob":"SÖB Miktar sütunundaki yazı (ör. 50 KS)","fiyat":"Fiyat sütunundaki birim fiyat","tutar":"Tutar sütunundaki satır tutarı","urun":"listemizdeki ürün adı; listemizde karşılığı yoksa boş bırak"}]}
 Kurallar:
 - tarih: kağıt irsaliyede "Sevk Tarihi", e-postada "Sevkiyat Tarihi".
-- miktar: kağıt irsaliyede HER ZAMAN "TÖB Miktarı" sütunu (Malzeme Tanımı'nın hemen sağındaki, birimi ADET/KG olan sayı). "SÖB Miktar" sütunu (KS, KL, PAK, KOV, TRB gibi koli/paket cinsinden, "Birim"in sağındaki) ASLA kullanılmaz. Örnek: HAMUR 7 satırında TÖB 600 ADET, SÖB 50 KS ise miktar 600 olur, 50 değil; MOZZARELLA TÖB 96 KG, SÖB 8 KL ise miktar 96 olur. Ondalık virgülü noktaya çevir, 7,68 → 7.68; e-postada "Sevk Edilen" sütunundaki sayı (yoksa "Onaylanan").
-- urun eşleştirme örnekleri: "HAMUR 7" → "7 HAMUR", "PIZZA TABANI 10 (24LU) - T" → "10 TABAN", "GURME PATATES" → "PATATES", "CITIR TAVUK FINGER" → "FİNGERS", "SADE CUBUK MOZARELLA 250G" → "ÇUBUK MOZZARELLA", "HAMBURGER PILIC KOFTE 550 GR" → "KÖFTE", "RENDE ERITME PEYNIRI 1 KG" → "ERİTME PEYNİRİ", "CIKOLATALI SUFLE" → "SUFLE", "TAVUK PARCALARI (KICKERS)" → "TAVUK PARÇALARI".
+- tob: kağıt irsaliyede HER ZAMAN "TÖB Miktarı" sütunu (Malzeme Tanımı'nın hemen sağındaki, birimi ADET/KG olan sayı). "SÖB Miktar" sütunu (KS, KL, PAK, KOV, TRB gibi koli/paket cinsinden, "Birim"in sağındaki) ASLA tob olarak yazılmaz. Örnek: HAMUR 7 satırında TÖB 600 ADET, SÖB 50 KS ise tob 600 olur, 50 değil; MOZZARELLA TÖB 96 KG, SÖB 8 KL ise tob 96 olur. Sayıları belgedeki gibi yaz (1.545,00 ya da 11,25); e-postada "Sevk Edilen" sütunundaki sayı (yoksa "Onaylanan"), e-postada fiyat/tutar yoksa boş bırak.
+- Her satırda tob × fiyat = tutar olmalı (küçük yuvarlama farkı olabilir). Tutmuyorsa o satırı yeniden oku.
+- urun eşleştirme örnekleri: "HAMUR 7" → "7 HAMUR", "PIZZA TABANI 10 (24LU) - T" → "10 TABAN", "GURME PATATES" → "PATATES", "CITIR TAVUK FINGER" → "FİNGERS", "SADE CUBUK MOZARELLA 250G" → "ÇUBUK MOZZARELLA", "HAMBURGER PILIC KOFTE 550 GR" → "KÖFTE", "RENDE ERITME PEYNIRI 1 KG" → "ERİTME PEYNİRİ", "CIKOLATALI SUFLE" → "SUFLE", "TAVUK PARCALARI (KICKERS)" → "TAVUK PARÇALARI". İçecek, sos, kutu, kağıt, temizlik, kıyafet, nakliye gibi ürünler listemizde yoktur: urun boş.
 Ürün listemiz: ${urunAdlari.join(' | ')}`;
     const parts = [{ text: prompt }]; let boyut = 0, ham = 0;
-    for (const f of dosyalar) { ham += f.size; const k = await kucult(f); boyut += k.size; parts.push({ inline_data: { mime_type: k.type || 'image/jpeg', data: await b64(k) } }); }
+    for (const f of dosyalar) { ham += f.size; const k = await kucult(f, 2400, .85, 1.5e6); boyut += k.size; parts.push({ inline_data: { mime_type: k.type || 'image/jpeg', data: await b64(k) } }); }
     const kb = n => n > 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' MB' : Math.round(n / 1e3) + ' KB';
     const okA = $('#okA'); if (okA) okA.innerHTML = `Gemini'ye gönderildi (${kb(boyut)}${ham > boyut * 1.2 ? `, fotoğraf ${kb(ham)} idi` : ''}), okunuyor… Genelde birkaç saniye.`;
     const fotoP = fotoHazirla(dosyalar); // saklanacak fotoğraf Gemini beklenirken hazırlanır
     const j = await gemini(parts); if (S.okumaIptal && S.okumaIptal.iptal) return;
     const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false && subedeGorunur(id, S.subeId)) adId[ascii(x.ad)] = id; });
-    const kal = (j.kalemler || []).map(k => { const tobV = k.tob != null && k.tob !== '' ? (typeof k.tob === 'number' ? k.tob : sayiOku(k.tob)) : null; const miktar = tobV != null && isFinite(tobV) ? tobV : (typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar)); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
+    const say = v => v == null || v === '' ? null : (typeof v === 'number' ? v : sayiOku(v));
+    const kal = (j.kalemler || []).map(k => { const tobV = say(k.tob); let miktar = tobV != null && isFinite(tobV) ? tobV : say(k.miktar); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
       const baskaUrun = !u && k.urun && adId[ascii(k.urun)]; // listede var ama SKT takibi yok → atla
-      return { ad: String(k.ad || '').trim(), miktar, u, aiU: u, gida: !baskaUrun }; }).filter(k => k.gida);
+      const adS = String(k.ad || '').trim(); const urunVar = !!(u || String(k.urun || '').trim());
+      const o = { ad: adS, miktar, u, aiU: u, gida: !baskaUrun && urunVar };
+      // Satır kayması koruması: kağıtta miktar × fiyat = tutar olmalı. Tutmuyorsa miktar tutar ÷ fiyat ile bulunur; uyarı satırı gösterilir.
+      const fy = say(k.fiyat), tt = say(k.tutar);
+      if (u && fy > 0 && tt > 0) { const tol = Math.max(0.06, tt * 0.003);
+        if (miktar == null || Math.abs(miktar * fy - tt) > tol) { const q = Math.round(tt / fy * 100) / 100;
+          if (q > 0 && Math.abs(q * fy - tt) <= tol) { o.uyari = miktar == null ? `Miktar okunamadı · tutardan hesaplandı: ${yaz(q)}` : `Okunan ${yaz(miktar)} tutarla uyuşmadı · tutar ÷ fiyat ile ${yaz(q)} yapıldı. Kağıtla kontrol edin.`; o.miktar = q; }
+          else o.uyari = `Miktar × fiyat tutarla uyuşmuyor. Kağıtla kontrol edin.`; } }
+      const bi = String(k.birim || '').trim().toLowerCase(); if (u && o.miktar != null && bi && !o.uyari) { const kg = /^(kg|kilo)/.test(bi), ad = /^(adet|ad)/.test(bi); if ((kg && birimK(u) !== 'kg') || (ad && birimK(u) !== 'adet')) o.uyari = `Belgede birim ${bi.toUpperCase()} yazıyor, ürün ${birimK(u)} ile sayılıyor. Satır kaymış olabilir; kağıtla kontrol edin.`; }
+      return o; }).filter(k => k.gida);
     S.irsTaslak = { tarih: /^\d{4}-\d{2}-\d{2}$/.test(j.tarih || '') ? j.tarih : bugun(), no: String(j.no || ''), okunanSube: j.sube || '', kaynak: j.tur === 'mail' ? 'mail' : 'kagit', kalemler: kal, digerleri: [], foto: await fotoP };
     clearInterval(zam); console.info('irsaliye okuma', Math.round((Date.now() - t0) / 1000), 'sn'); closeSheet(); go({ ar: 'irs' });
   } catch (e) { clearInterval(zam); console.error(e); if (e.code === 'iptal') { closeSheet(); return; } openSheet(`<h2>Okunamadı</h2><p class="note">${esc(AI_MESAJ[e.code] || hataMetni(e))}</p><div class="btns"><button class="btn alt" id="kp">Kapat</button></div>`, el => el.querySelector('#kp').onclick = closeSheet); }
@@ -1068,7 +1079,7 @@ function irsaliyeDuzen() {
     ${uyar.map(w => `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">Koli içi değişmiş olabilir: ${esc(urunAd(w.u))}</b><p class="note">İrsaliyede koli başı ${yaz(w.oran)}, ayarlarda ${yaz(w.ki)}.</p>${admin() ? `<div class="btns"><button class="btn sm alt" data-kg="${w.u}" data-v="${w.oran}">Ürünler'de ${yaz(w.oran)} yap</button></div>` : ''}</div>`).join('')}
     <div class="sec">Ürünler (${T.kalemler.length})${eslesmeyen ? ` · <span style="color:var(--red)">${eslesmeyen} eşleşmedi</span>` : ''}</div>
     <div class="irt"><div class="irt-h"><span>Ürün</span><span>Miktar</span></div>${T.kalemler.map((k, i) => { const u = k.u && S.urunler[k.u]; const coz = u && u.cozulmeGun ? `Çözülür: ${trTarih(gunEkle(T.tarih, u.cozulmeGun))} sabahına kadar` : '';
-      return `<div class="irr"><button class="irr-sil" data-sil="${i}">Sil</button><div class="irr-in ${k.u ? '' : 'yok'}"><div class="irr-r"><button class="irr-ad" data-sec="${i}">${esc(k.u ? urunAd(k.u) : (k.ad || 'Ürün seç'))}</button><input data-i="${i}" class="irM" inputmode="decimal" value="${yaz(k.miktar)}" aria-label="Miktar"><span class="irr-b">${k.u ? birimK(k.u) : ''}</span><button class="x irr-x" data-sil="${i}" aria-label="Satırı sil">✕</button></div>${k.u ? '' : '<div class="irr-n w">Eşleşmedi · ürün seçmek için dokunun ›</div>'}${coz ? `<div class="irr-n">${coz}</div>` : ''}</div></div>`; }).join('') || '<div class="empty" style="padding:20px">Kalem yok</div>'}</div>
+      return `<div class="irr"><button class="irr-sil" data-sil="${i}">Sil</button><div class="irr-in ${k.u ? '' : 'yok'}"><div class="irr-r"><button class="irr-ad" data-sec="${i}">${esc(k.u ? urunAd(k.u) : (k.ad || 'Ürün seç'))}</button><input data-i="${i}" class="irM" inputmode="decimal" value="${yaz(k.miktar)}" aria-label="Miktar"><span class="irr-b">${k.u ? birimK(k.u) : ''}</span><button class="x irr-x" data-sil="${i}" aria-label="Satırı sil">✕</button></div>${k.u ? '' : '<div class="irr-n w">Eşleşmedi · ürün seçmek için dokunun ›</div>'}${k.uyari ? `<div class="irr-n w">${esc(k.uyari)}</div>` : ''}${coz ? `<div class="irr-n">${coz}</div>` : ''}</div></div>`; }).join('') || '<div class="empty" style="padding:20px">Kalem yok</div>'}</div>
     <div class="btns" style="margin-top:0"><button class="btn alt" id="irS">+ Satır ekle</button></div>
     ${T.digerleri.length ? `<details class="card" style="margin-top:10px"><summary class="row" style="list-style:none"><div class="m"><b>Gıda dışı ${T.digerleri.length} kalem atlandı</b><span>${esc(T.digerleri.map(k => k.ad).join(', '))}</span></div></summary></details>` : ''}
     <p class="note">Sadece SKT'si takip edilen ürünler listelenir. Eşleşmeyen satırlar kaydedilmez. Elle eşleştirdiğiniz adlar bir sonraki irsaliyede kendiliğinden tanınır.</p>
@@ -1085,7 +1096,7 @@ function irsaliyeDuzen() {
     r.addEventListener('touchstart', e => { const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; dx = 0; yatay = null; inn.style.transition = 'none'; }, { passive: true });
     r.addEventListener('touchmove', e => { if (x0 == null) return; const t = e.touches[0]; const mx = t.clientX - x0, my = t.clientY - y0; if (yatay == null && (Math.abs(mx) > 8 || Math.abs(my) > 8)) yatay = Math.abs(mx) > Math.abs(my); if (!yatay) return; dx = Math.max(-84, Math.min(0, (r.classList.contains('ac') ? -84 : 0) + mx)); inn.style.transform = `translateX(${dx}px)`; }, { passive: true });
     r.addEventListener('touchend', () => { if (x0 == null) return; x0 = null; inn.style.transition = ''; if (!yatay) return; const ac = dx < -42; r.classList.toggle('ac', ac); inn.style.transform = ac ? 'translateX(-84px)' : ''; $('#app').querySelectorAll('.irr.ac').forEach(o => { if (o !== r) { o.classList.remove('ac'); o.querySelector('.irr-in').style.transform = ''; } }); }); });
-  $('#app').querySelectorAll('.irM').forEach(x => x.onchange = () => { T.kalemler[+x.dataset.i].miktar = sayiOku(x.value); });
+  $('#app').querySelectorAll('.irM').forEach(x => x.onchange = () => { const k = T.kalemler[+x.dataset.i]; k.miktar = sayiOku(x.value); if (k.uyari) { delete k.uyari; render(); } });
   $('#app').querySelectorAll('[data-sil]').forEach(x => x.onclick = () => { T.kalemler.splice(+x.dataset.sil, 1); render(); });
   $('#app').querySelectorAll('[data-kg]').forEach(x => x.onclick = () => { updateDoc(doc(db, 'genel', 'urunler'), { [`u.${x.dataset.kg}.koliIci`]: +x.dataset.v }).then(() => toast('Koli içi güncellendi.')).catch(hata); });
   $('#irS').onclick = () => { T.kalemler.push({ ad: '', miktar: null, u: null, gida: true }); render(); window.scrollTo(0, document.body.scrollHeight); };
