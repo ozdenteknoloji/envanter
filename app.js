@@ -446,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v23';
+const SURUM = 'v24';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -998,10 +998,10 @@ async function irsaliyeOku(dosyalar) {
     const prompt = `Bu görüntü(ler) Domino's Pizza şubesine gelen bir sevkiyatın belgesidir: ya kağıt e-İrsaliye ya da 3SC "siparişiniz teslim edildi" e-postasının ekran görüntüsü.
 Sadece aşağıdaki ürün listemizde karşılığı olan kalemleri oku (hamurlar, tabanlar ve son kullanma tarihi takip edilen donuk ürünler). Listede karşılığı olmayan bütün kalemleri (içecekler, soslar, kutular, kağıtlar, temizlik, kıyafet, nakliye vb.) tamamen atla, yazma.
 Sadece şu JSON'u döndür:
-{"tur":"irsaliye" ya da "mail","sube":"belgedeki şube adı (ör. SERİK)","tarih":"YYYY-AA-GG","no":"irsaliye no ya da sipariş no","kalemler":[{"ad":"belgede yazdığı gibi ürün adı","miktar":sayı,"urun":"listemizdeki ürün adı"}]}
+{"tur":"irsaliye" ya da "mail","sube":"belgedeki şube adı (ör. SERİK)","tarih":"YYYY-AA-GG","no":"irsaliye no ya da sipariş no","kalemler":[{"ad":"belgede yazdığı gibi ürün adı","tob":"TÖB Miktarı sütunundaki sayı","sob":"SÖB Miktar sütunundaki yazı (ör. 50 KS)","miktar":"tob ile aynı sayı","urun":"listemizdeki ürün adı"}]}
 Kurallar:
 - tarih: kağıt irsaliyede "Sevk Tarihi", e-postada "Sevkiyat Tarihi".
-- miktar: kağıt irsaliyede "TÖB Miktarı" sütunu (ondalık virgülü noktaya çevir, 7,68 → 7.68); e-postada "Sevk Edilen" sütunundaki sayı (yoksa "Onaylanan").
+- miktar: kağıt irsaliyede HER ZAMAN "TÖB Miktarı" sütunu (Malzeme Tanımı'nın hemen sağındaki, birimi ADET/KG olan sayı). "SÖB Miktar" sütunu (KS, KL, PAK, KOV, TRB gibi koli/paket cinsinden, "Birim"in sağındaki) ASLA kullanılmaz. Örnek: HAMUR 7 satırında TÖB 600 ADET, SÖB 50 KS ise miktar 600 olur, 50 değil; MOZZARELLA TÖB 96 KG, SÖB 8 KL ise miktar 96 olur. Ondalık virgülü noktaya çevir, 7,68 → 7.68; e-postada "Sevk Edilen" sütunundaki sayı (yoksa "Onaylanan").
 - urun eşleştirme örnekleri: "HAMUR 7" → "7 HAMUR", "PIZZA TABANI 10 (24LU) - T" → "10 TABAN", "GURME PATATES" → "PATATES", "CITIR TAVUK FINGER" → "FİNGERS", "SADE CUBUK MOZARELLA 250G" → "ÇUBUK MOZZARELLA", "HAMBURGER PILIC KOFTE 550 GR" → "KÖFTE", "RENDE ERITME PEYNIRI 1 KG" → "ERİTME PEYNİRİ", "CIKOLATALI SUFLE" → "SUFLE", "TAVUK PARCALARI (KICKERS)" → "TAVUK PARÇALARI".
 Ürün listemiz: ${urunAdlari.join(' | ')}`;
     const parts = [{ text: prompt }]; let boyut = 0, ham = 0;
@@ -1011,7 +1011,7 @@ Kurallar:
     const fotoP = fotoHazirla(dosyalar); // saklanacak fotoğraf Gemini beklenirken hazırlanır
     const j = await gemini(parts); if (S.okumaIptal && S.okumaIptal.iptal) return;
     const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false && subedeGorunur(id, S.subeId)) adId[ascii(x.ad)] = id; });
-    const kal = (j.kalemler || []).map(k => { const miktar = typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
+    const kal = (j.kalemler || []).map(k => { const tobV = k.tob != null && k.tob !== '' ? (typeof k.tob === 'number' ? k.tob : sayiOku(k.tob)) : null; const miktar = tobV != null && isFinite(tobV) ? tobV : (typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar)); // TÖB öncelikli, SÖB asla let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
       const baskaUrun = !u && k.urun && adId[ascii(k.urun)]; // listede var ama SKT takibi yok → atla
       return { ad: String(k.ad || '').trim(), miktar, u, aiU: u, gida: !baskaUrun }; }).filter(k => k.gida);
     S.irsTaslak = { tarih: /^\d{4}-\d{2}-\d{2}$/.test(j.tarih || '') ? j.tarih : bugun(), no: String(j.no || ''), okunanSube: j.sube || '', kaynak: j.tur === 'mail' ? 'mail' : 'kagit', kalemler: kal, digerleri: [], foto: await fotoP };
