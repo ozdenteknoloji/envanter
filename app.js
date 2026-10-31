@@ -446,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v24';
+const SURUM = 'v25';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -1011,7 +1011,7 @@ Kurallar:
     const fotoP = fotoHazirla(dosyalar); // saklanacak fotoğraf Gemini beklenirken hazırlanır
     const j = await gemini(parts); if (S.okumaIptal && S.okumaIptal.iptal) return;
     const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false && subedeGorunur(id, S.subeId)) adId[ascii(x.ad)] = id; });
-    const kal = (j.kalemler || []).map(k => { const tobV = k.tob != null && k.tob !== '' ? (typeof k.tob === 'number' ? k.tob : sayiOku(k.tob)) : null; const miktar = tobV != null && isFinite(tobV) ? tobV : (typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar)); // TÖB öncelikli, SÖB asla let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
+    const kal = (j.kalemler || []).map(k => { const tobV = k.tob != null && k.tob !== '' ? (typeof k.tob === 'number' ? k.tob : sayiOku(k.tob)) : null; const miktar = tobV != null && isFinite(tobV) ? tobV : (typeof k.miktar === 'number' ? k.miktar : sayiOku(k.miktar)); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
       const baskaUrun = !u && k.urun && adId[ascii(k.urun)]; // listede var ama SKT takibi yok → atla
       return { ad: String(k.ad || '').trim(), miktar, u, aiU: u, gida: !baskaUrun }; }).filter(k => k.gida);
     S.irsTaslak = { tarih: /^\d{4}-\d{2}-\d{2}$/.test(j.tarih || '') ? j.tarih : bugun(), no: String(j.no || ''), okunanSube: j.sube || '', kaynak: j.tur === 'mail' ? 'mail' : 'kagit', kalemler: kal, digerleri: [], foto: await fotoP };
