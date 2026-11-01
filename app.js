@@ -446,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v30';
+const SURUM = 'v31';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -951,7 +951,7 @@ try { dusunmeI = +localStorage.getItem('env_dusunme2') || 0; } catch (e) { }
 async function geminiCagir(model, key, parts) {
   for (;;) {
     const gc = { temperature: 0, responseMimeType: 'application/json' }; const th = DUSUNME[dusunmeI]; if (th) gc.thinkingConfig = th;
-    const ctl = new AbortController(); const zt = setTimeout(() => ctl.abort('zaman'), 30000); if (S.okumaIptal) S.okumaIptal.onabort = () => ctl.abort('iptal');
+    const ctl = new AbortController(); const zt = setTimeout(() => ctl.abort('zaman'), 60000); if (S.okumaIptal) S.okumaIptal.onabort = () => ctl.abort('iptal');
     let res; try { res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: gc }) });
     } catch (e) { clearTimeout(zt); if (ctl.signal.reason === 'iptal') throw aiHata('iptal'); if (ctl.signal.aborted) throw aiHata('zaman'); throw aiHata('ag', e.message); }
     let j = null; try { j = await res.json(); } catch (e) { } clearTimeout(zt);
@@ -988,13 +988,13 @@ async function gemini(parts) {
   }
   throw aiHata('zaman');
 }
-const AI_MESAJ = { zaman: 'Gemini 30 saniyede cevap vermedi (başka modelle de denendi). İnternet bağlantısını kontrol edip tekrar deneyin ya da irsaliyeyi elle girin.', yogun: 'Gemini şu an yoğun. Biraz sonra tekrar deneyin ya da elle girin.', ag: 'Gemini\'ye bağlanılamadı. İnternet bağlantısını kontrol edin.', iptal: 'Okuma iptal edildi.', rate: 'Gemini ücretsiz kullanım sınırına ulaşıldı. Bir dakika sonra tekrar deneyin.', key: 'Gemini anahtarı geçersiz. Yönetici Ayarlar → Fotoğraf okuma bölümünden kontrol etsin.', model: 'Gemini modeli bulunamadı. Ayarlarda model alanını boş bırakın.', json: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.', bos: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.' };
+const AI_MESAJ = { zaman: 'Gemini 60 saniyede cevap vermedi (başka modelle de denendi). İnternet bağlantısını kontrol edip tekrar deneyin ya da irsaliyeyi elle girin.', yogun: 'Gemini şu an yoğun. Biraz sonra tekrar deneyin ya da elle girin.', ag: 'Gemini\'ye bağlanılamadı. İnternet bağlantısını kontrol edin.', iptal: 'Okuma iptal edildi.', rate: 'Gemini ücretsiz kullanım sınırına ulaşıldı. Bir dakika sonra tekrar deneyin.', key: 'Gemini anahtarı geçersiz. Yönetici Ayarlar → Fotoğraf okuma bölümünden kontrol etsin.', model: 'Gemini modeli bulunamadı. Ayarlarda model alanını boş bırakın.', json: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.', bos: 'Fotoğraf okunamadı. Daha net bir fotoğraf deneyin.' };
 const eslKey = ad => ascii(ad).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 function eslesmeBul(ad) { const k = eslKey(ad); const u = S.eslesme[k]; return u && S.urunler[u] && S.urunler[u].aktif !== false ? u : null; }
 async function irsaliyeOku(dosyalar) {
   const t0 = Date.now(); openSheet(`<h2>Okunuyor… <span id="okS" class="num" style="color:var(--mut);font-size:15px"></span></h2><p class="note" id="okA">Fotoğraf hazırlanıyor…</p><div class="bar"><i id="okB" style="width:5%;transition:width .9s linear"></i></div><div class="btns"><button class="btn alt" id="okV">Vazgeç</button></div>`);
   S.okumaIptal = { onabort: null }; const ip = S.okumaIptal; $('#okV').onclick = () => { ip.iptal = true; if (ip.onabort) ip.onabort(); };
-  const zam = setInterval(() => { const sn = Math.round((Date.now() - t0) / 1000); const s1 = $('#okS'), b1 = $('#okB'); if (s1) s1.textContent = sn + ' sn'; if (b1) b1.style.width = Math.min(95, 5 + sn * 4) + '%'; }, 1000);
+  const zam = setInterval(() => { const sn = Math.round((Date.now() - t0) / 1000); const s1 = $('#okS'), b1 = $('#okB'); if (s1) s1.textContent = sn + ' sn'; if (b1) b1.style.width = Math.min(95, 5 + sn * 2) + '%'; }, 1000);
   try {
     const urunAdlari = sktUrunleri().map(u => u.ad);
     const prompt = `Bu görüntü(ler) Domino's Pizza şubesine gelen bir sevkiyatın belgesidir: ya kağıt e-İrsaliye ya da 3SC "siparişiniz teslim edildi" e-postasının ekran görüntüsü.
