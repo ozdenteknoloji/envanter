@@ -446,7 +446,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v29';
+const SURUM = 'v30';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -868,7 +868,7 @@ function eksikIrsaliyeler(sb) { // girilmesi gereken ama girilmemiş sevkiyatlar
 }
 const eksikIrsKutusu = sb => { const l = eksikIrsaliyeler(sb); return l.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${l.map(o => trTarih(o.sevk)).join(', ')} sevkiyatının irsaliyesi girilmedi</b><p class="note">İrsaliye girilmeyince SKT ve atık hesabı eksik kalır.</p><div class="btns"><button class="btn sm" id="irEkleU">İrsaliye ekle</button></div></div>` : ''; };
 // SKT günü ürünlerdeki varsayılandır; her şube kendi ayarında (isaret[ürün].s) bir üründe takibi kapatabilir (0) ya da günü değiştirebilir
-const sktGunu = u => { const v = sube()?.isaret?.[u]?.s; if (v != null) return +v > 0 ? +v : null; return S.urunler[u]?.sktGun || null; };
+const sktGunu = u => { const v = sube()?.isaret?.[u]?.s; if (v != null) return +v > 0 ? +v : null; const x = S.urunler[u]; return x && !x.sktKapali ? (x.sktGun || null) : null; };
 function sktDurum(u, sy) {
   const x = S.urunler[u], sg = sktGunu(u); if (!x || !sg) return null;
   const R = refTarih(); const st = stokBul(u, sy); if (!st) return { sayimYok: true };
@@ -1379,15 +1379,16 @@ const subeKaydet = (id, patch) => setDoc(doc(db, 'subeler', id), patch, { merge:
 function sktAyar(sid) {
   const s = S.subeler[sid]; if (!s) return; const isaret = s.isaret || {};
   const l = [...subedekiUrunler(s)].map(u => ({ id: u, ...S.urunler[u] })).filter(u => u.ad && u.aktif !== false && u.sktGun).sort((a, b) => (a.sira ?? 999) - (b.sira ?? 999));
-  const gec = u => { const v = isaret[u]?.s; return v == null ? (S.urunler[u].sktGun || null) : (v > 0 ? v : null); };
-  openSheet(`<h2>SKT takibi · ${esc(s.ad)}</h2><p class="note">Sadece bu şubeyi etkiler. Takip etmediğiniz ürünün işaretini kaldırın; gün sayısını bu şube için değiştirebilirsiniz. Listede Ürünler'de SKT günü yazılı olanlar çıkar.</p>
+  const vars = u => S.urunler[u].sktKapali ? null : (S.urunler[u].sktGun || null); // ürünlerdeki varsayılan (kapalı gelen ürünlerde yok)
+  const gec = u => { const v = isaret[u]?.s; return v == null ? vars(u) : (v > 0 ? v : null); };
+  openSheet(`<h2>SKT takibi · ${esc(s.ad)}</h2><p class="note">Sadece bu şubeyi etkiler. Takip etmediğiniz ürünün işaretini kaldırın, takip edeceğinizi işaretleyin; gün sayısını bu şube için değiştirebilirsiniz. Listede Ürünler'de SKT günü yazılı olanlar çıkar.</p>
     <input class="search" id="skA" placeholder="Ara…"><div class="card" style="max-height:50vh;overflow:auto">${l.map(u => `<div class="row" data-ad="${esc(ascii(u.ad))}" style="cursor:default"><label class="chk" style="flex:1;border:0;padding:0"><input type="checkbox" class="skC" data-u="${u.id}" ${gec(u.id) ? 'checked' : ''}><span>${esc(u.ad)}</span></label><input class="skG" data-u="${u.id}" inputmode="numeric" placeholder="gün" value="${gec(u.id) || u.sktGun || ''}" style="width:56px;text-align:right"></div>`).join('') || '<div class="empty" style="padding:20px">SKT günü yazılı ürün yok.</div>'}</div>
     <div class="err" id="skE"></div><div class="btns"><button class="btn" id="skK">Kaydet</button></div>`, el => {
     el.querySelector('#skA').oninput = e => { const q = ascii(e.target.value); el.querySelectorAll('[data-ad]').forEach(r => r.hidden = q && !r.dataset.ad.includes(q)); };
     el.querySelector('#skK').onclick = () => {
       const o = { ...isaret }; let hataM = '';
-      el.querySelectorAll('.skC').forEach(c => { const u = c.dataset.u, varsayilan = S.urunler[u].sktGun || null; const e = { ...(o[u] || {}) };
-        if (!c.checked) e.s = 0;
+      el.querySelectorAll('.skC').forEach(c => { const u = c.dataset.u, varsayilan = vars(u); const e = { ...(o[u] || {}) };
+        if (!c.checked) { if (varsayilan == null) delete e.s; else e.s = 0; }
         else { const g = Math.round(sayiOku(el.querySelector(`.skG[data-u="${u}"]`).value)); if (!(g > 0)) { hataM = `${urunAd(u)} için SKT gününü yazın.`; return; } if (g === varsayilan) delete e.s; else e.s = g; }
         if (Object.keys(e).length) o[u] = e; else delete o[u]; });
       if (hataM) return el.querySelector('#skE').textContent = hataM;
@@ -1583,7 +1584,7 @@ function urunlerAyar() {
     <input class="search" id="ua" placeholder="Ara…" value="${esc(S.urunAra || '')}">
 <p class="note" style="margin:0 0 8px"><b>Günlük</b>: günlük sayımda sayılsın (haftalıkta zaten hepsi sayılır). <b>Sipariş</b>: sipariş listesinde çıkar. Burası <b>bütün şubeler için varsayılan</b>; her şube kendi ayarlarından (Günlük / haftalık listesi) kendi için değiştirebilir.</p>
     <div class="fh" id="uf"><span id="usay">${l.length} ürün</span>${[['g', 'Günlük'], ['s', 'Sipariş']].map(([k, ad]) => { const c = (k === 'g' ? S.urunFg : S.urunFs) || 'hepsi'; return `<button class="${c !== 'hepsi' ? 'on' : ''}" data-f="${k}">${ad}${c === 'evet' ? ': var' : c === 'hayir' ? ': yok' : ''} ${c === 'hepsi' ? '▾' : '⏷'}</button>`; }).join('')}</div>
-    <div class="card">${l.map(u => `<div class="row" data-ad="${esc(ascii(u.ad))}" data-gn="${u.gunluk ? 1 : 0}" data-sp="${u.siparis ? 1 : 0}" style="cursor:default"><div class="m" data-u="${u.id}" style="cursor:pointer"><b>${esc(u.ad)}${u.sube ? ` <span class="tag b">sadece ${esc(S.subeler[u.sube]?.ad || u.sube)}</span>` : ''}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''} · ${kullanim[u.id] || 0} şube${u.sktGun ? ` · <span style="color:var(--amber);font-weight:700">SKT ${u.sktGun} gün</span>` : ''}</span></div>
+    <div class="card">${l.map(u => `<div class="row" data-ad="${esc(ascii(u.ad))}" data-gn="${u.gunluk ? 1 : 0}" data-sp="${u.siparis ? 1 : 0}" style="cursor:default"><div class="m" data-u="${u.id}" style="cursor:pointer"><b>${esc(u.ad)}${u.sube ? ` <span class="tag b">sadece ${esc(S.subeler[u.sube]?.ad || u.sube)}</span>` : ''}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''} · ${kullanim[u.id] || 0} şube${u.sktGun ? ` · <span style="color:var(--amber);font-weight:700">SKT ${u.sktGun} gün${u.sktKapali ? ' (şube açar)' : ''}</span>` : ''}</span></div>
       <button class="chip ${u.gunluk ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="gunluk" data-id="${u.id}">${u.gunluk ? '✓ ' : ''}Günlük</button><button class="chip ${u.siparis ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="siparis" data-id="${u.id}">${u.siparis ? '✓ ' : ''}Sipariş</button></div>`).join('')}</div>
     ${kalk.length ? `<details class="card" style="padding:0"><summary class="row" style="list-style:none"><div class="m"><b>Kaldırılan ürünler (${kalk.length})</b><span>Sayımlarda ve listelerde görünmezler · dokunup geri alabilirsiniz</span></div><span class="ch">▾</span></summary>${kalk.map(u => `<button class="row" data-u="${u.id}" data-ad="${esc(ascii(u.ad))}"><div class="m"><b style="color:var(--mut)">${esc(u.ad)}</b><span>${u.kaldirma ? 'kaldırıldı ' + trTarih(u.kaldirma.slice(0, 10)) : 'kaldırıldı'}</span></div></button>`).join('')}</details>` : ''}</div>`;
   bagla();
@@ -1611,6 +1612,7 @@ function urunPanel(id, opt = {}) {
     <label class="field"><span>Koli / paket içi</span><input id="pk" inputmode="decimal" value="${n(u.koliIci)}" placeholder="örn. 0,5"></label>
     <label class="field"><span>SKT (gün)</span><input id="ps" inputmode="numeric" value="${n(u.sktGun)}" placeholder="takip yoksa boş"></label>
     <label class="field"><span>Çözülme (gün)</span><input id="pc" inputmode="numeric" value="${n(u.cozulmeGun)}" placeholder="yoksa boş"></label></div>
+    <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pSk0" ${u.sktKapali ? 'checked' : ''}> SKT şubelerde kapalı gelsin (şube ayarlarından açılır)</label>
     <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pGn" ${u.gunluk ? 'checked' : ''}> Günlük sayımda sayılır</label>
     <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pSp" ${u.siparis ? 'checked' : ''}> Sipariş listesinde</label>
     <label class="field"><span>Sipariş kolisi (Domino's sevkiyat kolisi, ${u.birim === 'adet' ? 'adet' : 'kg'})</span><input id="pSk" inputmode="decimal" value="${n(u.sKoli)}" placeholder="örn. sucuk 10, 7 hamur 12"></label>
@@ -1625,7 +1627,7 @@ function urunPanel(id, opt = {}) {
       const ad = el.querySelector('#pa').value.trim().toLocaleUpperCase('tr-TR'); if (!ad) return el.querySelector('#pe').textContent = 'Ürün adı yazın.';
       if (Object.entries(S.urunler).some(([k, x]) => k !== id && x.ad === ad && x.aktif !== false && (!x.sube || !u.sube || x.sube === u.sube))) return el.querySelector('#pe').textContent = 'Bu adda ürün zaten var.';
       const ni = v => { const x = sayiOku(v); return x == null ? null : Math.round(x); };
-      const data = { ad, birim: el.querySelector('#pb').value, koliIci: sayiOku(el.querySelector('#pk').value), sktGun: ni(el.querySelector('#ps').value), cozulmeGun: ni(el.querySelector('#pc').value), gunluk: el.querySelector('#pGn').checked, siparis: el.querySelector('#pSp').checked, sKoli: sayiOku(el.querySelector('#pSk').value), aktif: true };
+      const data = { ad, birim: el.querySelector('#pb').value, koliIci: sayiOku(el.querySelector('#pk').value), sktGun: ni(el.querySelector('#ps').value), ...(el.querySelector('#pSk0').checked ? { sktKapali: true } : {}), cozulmeGun: ni(el.querySelector('#pc').value), gunluk: el.querySelector('#pGn').checked, siparis: el.querySelector('#pSp').checked, sKoli: sayiOku(el.querySelector('#pSk').value), aktif: true };
       if (id && u.dara != null) data.dara = u.dara; if (u.sube) data.sube = u.sube;
       const yid = id || yeniId('u'); if (!id) data.sira = Math.max(0, ...Object.values(S.urunler).map(x => x.sira ?? 0)) + 1; else data.sira = u.sira ?? 999;
       try {

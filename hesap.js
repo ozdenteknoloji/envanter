@@ -67,7 +67,7 @@ export function hesapKur(S, now = () => new Date()) {
 
   // --- SKT durumu
   // SKT günü ürünlerdeki varsayılandır; şube kendi ayarında (isaret[ürün].s) kapatabilir (0) ya da günü değiştirebilir
-  const sktGunu = u => { const v = sube()?.isaret?.[u]?.s; if (v != null) return +v > 0 ? +v : null; return S.urunler[u]?.sktGun || null; };
+  const sktGunu = u => { const v = sube()?.isaret?.[u]?.s; if (v != null) return +v > 0 ? +v : null; const x = S.urunler[u]; return x && !x.sktKapali ? (x.sktGun || null) : null; };
   function sktDurum(u, sy) {
     const x = S.urunler[u], sg = sktGunu(u); if (!x || !sg) return null;
     const R = refTarih(); const st = stokBul(u, sy); if (!st) return { sayimYok: true };
