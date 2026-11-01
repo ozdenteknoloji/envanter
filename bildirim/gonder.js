@@ -15,11 +15,10 @@ console.log(`mod=${mod} cihaz=${cihazlar.length} sube=${Object.keys(subeler).len
 
 async function subeMesaj(id) {
   const sb = subeler[id]; if (!sb) return null;
-  const S = { urunler, subeler, subeId: id, sayimlar: [], irsaliyeler: [], tazeler: [] };
+  const S = { urunler, subeler, subeId: id, sayimlar: [], irsaliyeler: [] };
   const sonSayim = new Date(Date.now() - 20 * 864e5).toISOString().slice(0, 10);
   (await db.collection('sayimlar').where('sube', '==', id).get()).forEach(d => { const v = d.data(); if (v.tarih >= sonSayim) S.sayimlar.push({ id: d.id, ...v }); });
-  const hepsi = (await db.collection('irsaliyeler').where('sube', '==', id).get()).docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.tarih.localeCompare(a.tarih) || (b.zaman || '').localeCompare(a.zaman || ''));
-  S.irsaliyeler = hepsi.filter(x => x.kaynak !== 'taze'); S.tazeler = hepsi.filter(x => x.kaynak === 'taze');
+  S.irsaliyeler = (await db.collection('irsaliyeler').where('sube', '==', id).get()).docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.tarih.localeCompare(a.tarih) || (b.zaman || '').localeCompare(a.zaman || ''));
   const H = hesapKur(S);
   if (mod === 'aksam') {
     const e = H.eksikIrsaliyeler(sb); if (!e.length) return null;
