@@ -46,7 +46,7 @@ const closeSheet = () => $('#sheetRoot').replaceChildren();
 async function onayla(msg, evet = 'Evet') { return new Promise(res => { openSheet(`<h2>Emin misiniz?</h2><p class="note" style="font-size:14px">${msg}</p><div class="btns"><button class="btn alt" id="hy">Vazgeç</button><button class="btn" id="he">${esc(evet)}</button></div>`, el => { el.querySelector('#hy').onclick = () => { closeSheet(); res(false); }; el.querySelector('#he').onclick = () => { closeSheet(); res(true); }; }); }); }
 
 /* ================= Durum ================= */
-const S = { ai: {}, ayar: {}, ayarYuklendi: false, eslesme: {}, irsaliyeler: [], siparisler: [],
+const S = { ai: {}, ayar: {}, ayarYuklendi: false, eslesme: {}, irsaliyeler: [], tazeler: [], siparisler: [],
   user: null, me: null, meYuklendi: false, kurulumVar: null,
   urunler: {}, urunYuklendi: false, subeler: {}, kullanicilar: [],
   subeId: null, sayimlar: [], tab: 'sayim', ar: null, syId: null, sonucId: null,
@@ -103,7 +103,7 @@ function subeSec(id) {
   if (hedef === S.subeId && S.unsub.sy) return;
   S.subeId = hedef || null; S.sayimlar = []; S.syId = null; S.sonucId = null;
   if (S.unsub.sy) { S.unsub.sy(); delete S.unsub.sy; }
-  if (S.unsub.irs) { S.unsub.irs(); delete S.unsub.irs; } S.irsaliyeler = [];
+  if (S.unsub.irs) { S.unsub.irs(); delete S.unsub.irs; } S.irsaliyeler = []; S.tazeler = [];
   if (S.unsub.sip) { S.unsub.sip(); delete S.unsub.sip; } S.siparisler = [];
   if (!S.subeId) return;
   const sid = S.subeId;
@@ -113,7 +113,8 @@ function subeSec(id) {
     if (!(S.tab === 'siparis' && document.activeElement && document.activeElement.closest && document.activeElement.closest('.sp'))) render();
   }, () => { });
   S.unsub.irs = onSnapshot(query(collection(db, 'irsaliyeler'), where('sube', '==', sid)), s => {
-    if (sid !== S.subeId) return; S.irsaliyeler = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.tarih.localeCompare(a.tarih) || (b.zaman || '').localeCompare(a.zaman || ''));
+    if (sid !== S.subeId) return; const hepsi = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.tarih.localeCompare(a.tarih) || (b.zaman || '').localeCompare(a.zaman || ''));
+    S.irsaliyeler = hepsi.filter(x => x.kaynak !== 'taze'); S.tazeler = hepsi.filter(x => x.kaynak === 'taze'); // taze girişler (irsaliyede gelmeyen ürünler) ayrı tutulur: irsaliye sınırı ve "irsaliye girilmedi" uyarısı etkilenmez
     eskiIrsaliyeleriSil(); render();
   }, hata);
   S.unsub.sy = onSnapshot(query(collection(db, 'sayimlar'), where('sube', '==', sid)), s => {
@@ -446,7 +447,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v26';
+const SURUM = 'v27';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -843,6 +844,8 @@ const sonZaman = sy => sy.son || sy.basla || '';
 // Her şubede sadece son N irsaliye (sevk tarihine göre) saklanır (Ayarlar'dan değişir, varsayılan 5); yenisi kaydedilince en eskisi silinir
 const irsSakla = () => Math.max(1, Math.min(30, parseInt(S.ayar && S.ayar.irsSakla, 10) || 5));
 function eskiIrsaliyeleriSil() {
+  const eskiTaze = S.tazeler.filter(x => x.tarih < gunEkle(bugun(), -30)); // taze girişler 30 gün sonra silinir
+  if (eskiTaze.length) { const b = writeBatch(db); eskiTaze.forEach(x => b.delete(doc(db, 'irsaliyeler', x.id))); b.commit().catch(() => { }); }
   if (!S.ayarYuklendi || S.irsaliyeler.length <= irsSakla()) return; // ayar gelmeden silinmez; S.irsaliyeler yeniden eskiye sıralı
   const eski = S.irsaliyeler.slice(irsSakla());
   const b = writeBatch(db); eski.forEach(x => { b.delete(doc(db, 'irsaliyeler', x.id)); if (x.foto > 0) { b.delete(doc(db, 'irsaliyeFoto', x.id)); delete fotoOnb[x.id]; } }); b.commit().catch(() => { });
@@ -870,14 +873,15 @@ const eksikIrsKutusu = sb => { const l = eksikIrsaliyeler(sb); return l.length ?
 function sktDurum(u, sy) {
   const x = S.urunler[u]; if (!x || !x.sktGun) return null;
   const R = refTarih(); const st = stokBul(u, sy); if (!st) return { sayimYok: true };
-  const partiler = []; for (const ir of S.irsaliyeler) for (const k of ir.kalemler || []) if (k.u === u && k.miktar > 0) partiler.push({ t: ir.tarih, q: k.miktar, son: gunEkle(ir.tarih, x.sktGun), coz: x.cozulmeGun ? gunEkle(ir.tarih, x.cozulmeGun) : null });
+  const partiler = []; for (const ir of x.taze ? S.tazeler : S.irsaliyeler) for (const k of ir.kalemler || []) if (k.u === u && k.miktar > 0) partiler.push({ t: ir.tarih, q: k.miktar, son: gunEkle(ir.tarih, x.sktGun), coz: x.cozulmeGun ? gunEkle(ir.tarih, x.cozulmeGun) : null });
   const sonra = partiler.filter(p => p.t > st.sy.tarih).reduce((a, p) => a + p.q, 0); // sayımdan sonra gelen
   const stok = r6(st.t + sonra); partiler.sort((a, b) => b.t.localeCompare(a.t)); // önce yeni parti
   let kalan = stok; const gecerli = [];
   for (const p of partiler) { if (p.son < R) continue; const a = r6(Math.min(p.q, Math.max(0, kalan))); kalan = r6(kalan - a); gecerli.push({ ...p, a }); }
-  const ilk = S.irsaliyeler.length ? S.irsaliyeler[S.irsaliyeler.length - 1].tarih : null;
+  const kay = x.taze ? S.tazeler : S.irsaliyeler; // taze ürünlerde geçmiş, o ürünün ilk "geldi" girişinden başlar
+  const ilk = x.taze ? (partiler.length ? partiler[partiler.length - 1].t : null) : (kay.length ? kay[kay.length - 1].tarih : null);
   const tamEski = !!ilk && ilk <= gunEkle(R, -x.sktGun); // SKT süresi kadar geriye irsaliye kaydı var mı
-  const onc = ilk ? oncekiSevk(sube(), ilk) : null; // takvime göre en eski irsaliyeden önceki sevkiyat: onun SKT'si de bittiyse, irsaliyesiz stok kesin atık
+  const onc = ilk && !x.taze ? oncekiSevk(sube(), ilk) : null; // takvime göre en eski irsaliyeden önceki sevkiyat: onun SKT'si de bittiyse, irsaliyesiz stok kesin atık
   const tam = tamEski || (!!onc && gunEkle(onc, x.sktGun) < R);
   return { stok, atik: tam ? r6(Math.max(0, kalan)) : null, eksik: !tam, eskiParti: tam && !tamEski && kalan > 0, gecerli, sy: st.sy, R };
 }
@@ -894,6 +898,22 @@ function sktEtiket(u, sy) {
   const yarinEt = yak > 0 ? `<span class="tag a" style="display:inline-block;margin-top:3px">${fmt(yak, S.urunler[u].birim)} ${d.gecerli.find(p => p.a > 0 && p.son <= yarin).son === bugun() ? 'bugün' : 'yarın'} SKT</span>` : '';
   if (d.eksik) return yarinEt || `<span class="tag" style="display:inline-block;margin-top:3px" title="Atık hesabı için irsaliye geçmişi henüz yeterli değil">yakın SKT yok</span>`;
   return `<span class="tag g" style="display:inline-block;margin-top:3px">SKT yok</span>${yarinEt ? ' ' + yarinEt : ''}`;
+}
+// Taze ürünler (sadece şubeye özel ve "irsaliyede gelmez" işaretli ürünler): geldiği gün + SKT günü kadar takip edilir
+const tazeUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && u.taze && u.sktGun && u.sube === S.subeId);
+function tazeGeldi() {
+  const l = tazeUrunleri(); if (!l.length) return;
+  openSheet(`<h2>Taze ürün geldi</h2><p class="note">Gelen miktarı yazın, boş bıraktıklarınız kaydedilmez. SKT, tarihten itibaren ürünün SKT günü kadar sayılır.</p>
+    <label class="field"><span>Geliş tarihi</span><input type="date" id="tzT" value="${bugun()}"></label>
+    <div class="card">${l.map(u => `<div class="row" style="cursor:default"><div class="m"><b>${esc(u.ad)}</b><span>SKT ${u.sktGun} gün</span></div><input class="tzM" data-u="${u.id}" inputmode="decimal" placeholder="0" style="width:72px;text-align:right"><span class="irr-b">${u.birim === 'adet' ? 'adet' : 'kg'}</span></div>`).join('')}</div>
+    <div class="err" id="tzE"></div><div class="btns"><button class="btn" id="tzK">Kaydet</button></div>`, el => {
+    el.querySelector('#tzK').onclick = async () => {
+      const t = el.querySelector('#tzT').value; if (!t) return el.querySelector('#tzE').textContent = 'Tarih seçin.';
+      const kalemler = []; el.querySelectorAll('.tzM').forEach(i => { const m = sayiOku(i.value); if (m > 0) kalemler.push({ u: i.dataset.u, miktar: r6(m), ad: '', koli: null }); });
+      if (!kalemler.length) return el.querySelector('#tzE').textContent = 'En az bir miktar yazın.';
+      try { await setDoc(doc(db, 'irsaliyeler', yeniId('i')), { sube: S.subeId, tarih: t, no: '', kaynak: 'taze', kalemler, ekleyen: benAd(), zaman: new Date().toISOString(), foto: 0 }); closeSheet(); toast('Taze giriş kaydedildi.'); } catch (e) { hata(e); }
+    };
+  });
 }
 function sktEkrani() {
   const sb = sube(); const R = refTarih(); const bg = bugun(); const yarin = gunEkle(bg, 1);
@@ -914,6 +934,7 @@ function sktEkrani() {
   $('#app').innerHTML = ust(`${sb.ad} · SKT`, { alt: `${kisaT(R)}${R !== bg ? ' (yarın)' : ''}'e göre · ${son ? 'son sayım ' + kisaT(son.tarih) + ' ' + saat(sonZaman(son)) : 'sayım yok'}` }) + `<div class="pad">
     ${eksikIrsKutusu(sb)}
     <div class="btns" style="margin:0 0 6px"><button class="btn" id="irEkle">+ İrsaliye ekle</button><button class="btn alt" id="opBtn">💬 Paylaş</button></div>
+    ${tazeUrunleri().length ? `<div class="btns" style="margin:0 0 6px"><button class="btn alt" id="tzEkle">🥬 Taze ürün geldi</button></div>` : ''}
     ${!S.irsaliyeler.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">Henüz irsaliye yok</b><p class="note">SKT hesabı için gelen her irsaliyeyi ekleyin. Atık hesabı, ürünün SKT süresi kadar geriye irsaliye kaydı birikince başlar.</p></div>` : ''}
     ${sec('Atık yapılacak (SKT geçmiş)', atik, o => kart('var(--red)', '!', o.u, `${o.yer ? 'Muhtemelen <b>' + esc(o.yer) + '</b>' : 'Geçerli irsaliyelerden fazla'}${o.eski ? ' · irsaliyesi olmayan eski parti' : ''}`, o.q))}
     ${sec('Bugün son gün', bugunL, o => kart('#dc2626', '0', o.u, `${o.t} irsaliyesinden kalan · bugün 23:59'da biter`, o.q))}
@@ -923,14 +944,17 @@ function sktEkrani() {
     ${hicbir && S.irsaliyeler.length && son ? `<div class="card p" style="background:var(--green-soft);border-color:transparent"><b style="color:var(--green)">SKT'si yaklaşan ürün yok.</b></div>` : ''}
     ${eksik.length && S.irsaliyeler.length ? `<p class="note">İrsaliye geçmişi henüz eksik olduğu için atık hesaplanmayan ürünler: ${eksik.map(urunAd).map(esc).join(', ')}</p>` : ''}
     ${yok.length ? `<p class="note">Sayımı olmayan SKT'li ürünler: ${yok.map(urunAd).map(esc).join(', ')}</p>` : ''}
-    <div class="sec">İrsaliyeler (son ${irsSakla()})</div><div class="card">${irs || '<div class="empty" style="padding:20px">İrsaliye yok.</div>'}</div></div>`;
+    <div class="sec">İrsaliyeler (son ${irsSakla()})</div><div class="card">${irs || '<div class="empty" style="padding:20px">İrsaliye yok.</div>'}</div>
+    ${tazeUrunleri().length ? `<div class="sec">Taze girişler (son 30 gün)</div><div class="card">${S.tazeler.slice(0, 15).map(ir => `<button class="row" data-tz="${ir.id}"><div class="m"><b>${trTarih(ir.tarih)}</b><span>${(ir.kalemler || []).map(k => esc(urunAd(k.u)) + ' ' + fmt(k.miktar, S.urunler[k.u]?.birim) + ' ' + birimK(k.u)).join(' · ')} · ${esc(ir.ekleyen || '')}</span></div><span class="ch">✕</span></button>`).join('') || '<div class="empty" style="padding:20px">Henüz giriş yok.</div>'}</div>` : ''}</div>`;
   bagla();
+  if ($('#tzEkle')) $('#tzEkle').onclick = tazeGeldi;
+  $('#app').querySelectorAll('[data-tz]').forEach(b => b.onclick = async () => { if (!(await onayla('Bu taze giriş silinecek; SKT hesabından çıkar.', 'Sil'))) return; deleteDoc(doc(db, 'irsaliyeler', b.dataset.tz)).catch(hata); });
   $('#opBtn').onclick = ozetPaylas; $('#irEkle').onclick = irsaliyeEkle; if ($('#irEkleU')) $('#irEkleU').onclick = irsaliyeEkle;
   $('#app').querySelectorAll('[data-ir]').forEach(b => b.onclick = () => { const ir = S.irsaliyeler.find(x => x.id === b.dataset.ir); if (!ir) return; S.irsTaslak = { id: ir.id, fotoN: ir.foto || 0, tarih: ir.tarih, no: ir.no || '', kaynak: ir.kaynak, kalemler: (ir.kalemler || []).map(k => ({ ...k, gida: true })), digerleri: [] }; go({ ar: 'irs' }); });
   $('#app').querySelectorAll('[data-foto]').forEach(b => b.onclick = e => { e.stopPropagation(); fotoAc(b.dataset.foto); });
 }
 // İrsaliyeden sadece SKT'si takip edilen ürünler (hamurlar, donuklar) okunur.
-const sktUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && u.sktGun && subedeGorunur(u.id, S.subeId));
+const sktUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && u.sktGun && !u.taze && subedeGorunur(u.id, S.subeId));
 function irsaliyeEkle() {
   const anahtar = !!(S.ai.geminiKey || '').trim();
   openSheet(`<h2>İrsaliye ekle</h2><p class="note">Kağıt irsaliyenin fotoğrafı ya da 3SC "Siparişiniz teslim edildi" mailinin ekran görüntüsü. Sadece SKT'si takip edilen ürünler (${sktUrunleri().length}: hamurlar, tabanlar, donuklar) okunur. Birden fazla sayfa seçebilirsiniz.</p>
@@ -1587,6 +1611,7 @@ function urunPanel(id, opt = {}) {
     <label class="field"><span>Koli / paket içi</span><input id="pk" inputmode="decimal" value="${n(u.koliIci)}" placeholder="örn. 0,5"></label>
     <label class="field"><span>SKT (gün)</span><input id="ps" inputmode="numeric" value="${n(u.sktGun)}" placeholder="takip yoksa boş"></label>
     <label class="field"><span>Çözülme (gün)</span><input id="pc" inputmode="numeric" value="${n(u.cozulmeGun)}" placeholder="yoksa boş"></label></div>
+    ${ozel ? `<label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pTz" ${u.taze ? 'checked' : ''}> İrsaliyede gelmez (taze ürün) · SKT'si "Taze ürün geldi" ile girilir</label>` : ''}
     <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pGn" ${u.gunluk ? 'checked' : ''}> Günlük sayımda sayılır</label>
     <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pSp" ${u.siparis ? 'checked' : ''}> Sipariş listesinde</label>
     <label class="field"><span>Sipariş kolisi (Domino's sevkiyat kolisi, ${u.birim === 'adet' ? 'adet' : 'kg'})</span><input id="pSk" inputmode="decimal" value="${n(u.sKoli)}" placeholder="örn. sucuk 10, 7 hamur 12"></label>
@@ -1603,6 +1628,7 @@ function urunPanel(id, opt = {}) {
       const ni = v => { const x = sayiOku(v); return x == null ? null : Math.round(x); };
       const data = { ad, birim: el.querySelector('#pb').value, koliIci: sayiOku(el.querySelector('#pk').value), sktGun: ni(el.querySelector('#ps').value), cozulmeGun: ni(el.querySelector('#pc').value), gunluk: el.querySelector('#pGn').checked, siparis: el.querySelector('#pSp').checked, sKoli: sayiOku(el.querySelector('#pSk').value), aktif: true };
       if (id && u.dara != null) data.dara = u.dara; if (u.sube) data.sube = u.sube;
+      const tz = el.querySelector('#pTz'); if (tz && tz.checked) { if (!data.sktGun) return el.querySelector('#pe').textContent = 'Taze ürün için SKT (gün) yazın.'; data.taze = true; }
       const yid = id || yeniId('u'); if (!id) data.sira = Math.max(0, ...Object.values(S.urunler).map(x => x.sira ?? 0)) + 1; else data.sira = u.sira ?? 999;
       try {
         if (Object.keys(S.urunler).length) await updateDoc(doc(db, 'genel', 'urunler'), { ['u.' + yid]: data }); else await setDoc(doc(db, 'genel', 'urunler'), { u: { [yid]: data } });
