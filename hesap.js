@@ -66,18 +66,21 @@ export function hesapKur(S, now = () => new Date()) {
   }
 
   // --- SKT durumu
+  // SKT günü ürünlerdeki varsayılandır; şube kendi ayarında (isaret[ürün].s) kapatabilir (0) ya da günü değiştirebilir
+  const sktGunu = u => { const v = sube()?.isaret?.[u]?.s; if (v != null) return +v > 0 ? +v : null; return S.urunler[u]?.sktGun || null; };
+  const tazeMi = u => !!S.urunler[u]?.taze && !!sktGunu(u);
   function sktDurum(u, sy) {
-    const x = S.urunler[u]; if (!x || !x.sktGun) return null;
+    const x = S.urunler[u], sg = sktGunu(u), tz = tazeMi(u); if (!x || !sg) return null;
     const R = refTarih(); const st = stokBul(u, sy); if (!st) return { sayimYok: true };
-    const partiler = []; for (const ir of x.taze ? (S.tazeler || []) : S.irsaliyeler) for (const k of ir.kalemler || []) if (k.u === u && k.miktar > 0) partiler.push({ t: ir.tarih, q: k.miktar, son: gunEkle(ir.tarih, x.sktGun), coz: x.cozulmeGun ? gunEkle(ir.tarih, x.cozulmeGun) : null });
+    const partiler = []; for (const ir of tz ? (S.tazeler || []) : S.irsaliyeler) for (const k of ir.kalemler || []) if (k.u === u && k.miktar > 0) partiler.push({ t: ir.tarih, q: k.miktar, son: gunEkle(ir.tarih, sg), coz: !tz && x.cozulmeGun ? gunEkle(ir.tarih, x.cozulmeGun) : null });
     const sonra = partiler.filter(p => p.t > st.sy.tarih).reduce((a, p) => a + p.q, 0); // sayımdan sonra gelen
     const stok = r6(st.t + sonra); partiler.sort((a, b) => b.t.localeCompare(a.t)); // önce yeni parti
     let kalan = stok; const gecerli = [];
     for (const p of partiler) { if (p.son < R) continue; const a = r6(Math.min(p.q, Math.max(0, kalan))); kalan = r6(kalan - a); gecerli.push({ ...p, a }); }
-    const ilk = x.taze ? (partiler.length ? partiler[partiler.length - 1].t : null) : (S.irsaliyeler.length ? S.irsaliyeler[S.irsaliyeler.length - 1].tarih : null); // taze ürünlerde geçmiş, o ürünün ilk "geldi" girişinden başlar
-    const tamEski = !!ilk && ilk <= gunEkle(R, -x.sktGun); // SKT süresi kadar geriye irsaliye kaydı var mı
-    const onc = ilk && !x.taze ? oncekiSevk(sube(), ilk) : null; // takvime göre en eski irsaliyeden önceki sevkiyat: onun SKT'si de bittiyse, irsaliyesiz stok kesin atık
-    const tam = tamEski || (!!onc && gunEkle(onc, x.sktGun) < R);
+    const ilk = tz ? (partiler.length ? partiler[partiler.length - 1].t : null) : (S.irsaliyeler.length ? S.irsaliyeler[S.irsaliyeler.length - 1].tarih : null); // taze ürünlerde geçmiş, o ürünün ilk "geldi" girişinden başlar
+    const tamEski = !!ilk && ilk <= gunEkle(R, -sg); // SKT süresi kadar geriye irsaliye kaydı var mı
+    const onc = ilk && !tz ? oncekiSevk(sube(), ilk) : null; // takvime göre en eski irsaliyeden önceki sevkiyat: onun SKT'si de bittiyse, irsaliyesiz stok kesin atık
+    const tam = tamEski || (!!onc && gunEkle(onc, sg) < R);
     return { stok, atik: tam ? r6(Math.max(0, kalan)) : null, eksik: !tam, eskiParti: tam && !tamEski && kalan > 0, gecerli, sy: st.sy, R };
   }
 
@@ -86,7 +89,7 @@ export function hesapKur(S, now = () => new Date()) {
     const R = bugun(), Y = gunEkle(R, 1), o = { atik: [], bugun: [], yarin: [] };
     const sayi = n => String(r6(n)).replace('.', ',');
     for (const u of Object.keys(S.urunler)) {
-      const x = S.urunler[u]; if (x.aktif === false || !x.sktGun) continue;
+      const x = S.urunler[u]; if (x.aktif === false || !sktGunu(u)) continue;
       let d; try { d = sktDurum(u); } catch { continue; } if (!d || d.sayimYok) continue;
       const ad = x.ad || u, bi = x.birim === 'kg' ? ' kg' : '';
       if (d.atik > 0) o.atik.push({ a: ad, q: sayi(d.atik) + bi });

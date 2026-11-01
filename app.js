@@ -447,7 +447,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v27';
+const SURUM = 'v28';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -870,19 +870,24 @@ function eksikIrsaliyeler(sb) { // girilmesi gereken ama girilmemiş sevkiyatlar
   return out;
 }
 const eksikIrsKutusu = sb => { const l = eksikIrsaliyeler(sb); return l.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">${l.map(o => trTarih(o.sevk)).join(', ')} sevkiyatının irsaliyesi girilmedi</b><p class="note">İrsaliye girilmeyince SKT ve atık hesabı eksik kalır.</p><div class="btns"><button class="btn sm" id="irEkleU">İrsaliye ekle</button></div></div>` : ''; };
+// SKT takibi: ürünün SKT günü ortak varsayılandır; her şube kendi ayarında (isaret[ürün].s) bir üründe takibi kapatabilir (0) ya da günü değiştirebilir.
+// Ürün "taze" (irsaliyede gelmez) işaretliyse girişleri irsaliyeden değil "Taze ürün geldi" ile yapılır.
+const sktAyarGun = u => { const v = sube()?.isaret?.[u]?.s; return v == null ? null : +v; };
+const sktGunu = u => { const o = sktAyarGun(u); if (o != null) return o > 0 ? o : null; return S.urunler[u]?.sktGun || null; };
+const tazeMi = u => !!S.urunler[u]?.taze && !!sktGunu(u);
 function sktDurum(u, sy) {
-  const x = S.urunler[u]; if (!x || !x.sktGun) return null;
+  const x = S.urunler[u], sg = sktGunu(u), tz = tazeMi(u); if (!x || !sg) return null;
   const R = refTarih(); const st = stokBul(u, sy); if (!st) return { sayimYok: true };
-  const partiler = []; for (const ir of x.taze ? S.tazeler : S.irsaliyeler) for (const k of ir.kalemler || []) if (k.u === u && k.miktar > 0) partiler.push({ t: ir.tarih, q: k.miktar, son: gunEkle(ir.tarih, x.sktGun), coz: x.cozulmeGun ? gunEkle(ir.tarih, x.cozulmeGun) : null });
+  const partiler = []; for (const ir of tz ? S.tazeler : S.irsaliyeler) for (const k of ir.kalemler || []) if (k.u === u && k.miktar > 0) partiler.push({ t: ir.tarih, q: k.miktar, son: gunEkle(ir.tarih, sg), coz: !tz && x.cozulmeGun ? gunEkle(ir.tarih, x.cozulmeGun) : null });
   const sonra = partiler.filter(p => p.t > st.sy.tarih).reduce((a, p) => a + p.q, 0); // sayımdan sonra gelen
   const stok = r6(st.t + sonra); partiler.sort((a, b) => b.t.localeCompare(a.t)); // önce yeni parti
   let kalan = stok; const gecerli = [];
   for (const p of partiler) { if (p.son < R) continue; const a = r6(Math.min(p.q, Math.max(0, kalan))); kalan = r6(kalan - a); gecerli.push({ ...p, a }); }
-  const kay = x.taze ? S.tazeler : S.irsaliyeler; // taze ürünlerde geçmiş, o ürünün ilk "geldi" girişinden başlar
-  const ilk = x.taze ? (partiler.length ? partiler[partiler.length - 1].t : null) : (kay.length ? kay[kay.length - 1].tarih : null);
-  const tamEski = !!ilk && ilk <= gunEkle(R, -x.sktGun); // SKT süresi kadar geriye irsaliye kaydı var mı
-  const onc = ilk && !x.taze ? oncekiSevk(sube(), ilk) : null; // takvime göre en eski irsaliyeden önceki sevkiyat: onun SKT'si de bittiyse, irsaliyesiz stok kesin atık
-  const tam = tamEski || (!!onc && gunEkle(onc, x.sktGun) < R);
+  const kay = S.irsaliyeler; // taze ürünlerde geçmiş, o ürünün ilk "geldi" girişinden başlar
+  const ilk = tz ? (partiler.length ? partiler[partiler.length - 1].t : null) : (kay.length ? kay[kay.length - 1].tarih : null);
+  const tamEski = !!ilk && ilk <= gunEkle(R, -sg); // SKT süresi kadar geriye irsaliye kaydı var mı
+  const onc = ilk && !tz ? oncekiSevk(sube(), ilk) : null; // takvime göre en eski irsaliyeden önceki sevkiyat: onun SKT'si de bittiyse, irsaliyesiz stok kesin atık
+  const tam = tamEski || (!!onc && gunEkle(onc, sg) < R);
   return { stok, atik: tam ? r6(Math.max(0, kalan)) : null, eksik: !tam, eskiParti: tam && !tamEski && kalan > 0, gecerli, sy: st.sy, R };
 }
 function atikYeri(sy, u, miktar) {
@@ -899,13 +904,13 @@ function sktEtiket(u, sy) {
   if (d.eksik) return yarinEt || `<span class="tag" style="display:inline-block;margin-top:3px" title="Atık hesabı için irsaliye geçmişi henüz yeterli değil">yakın SKT yok</span>`;
   return `<span class="tag g" style="display:inline-block;margin-top:3px">SKT yok</span>${yarinEt ? ' ' + yarinEt : ''}`;
 }
-// Taze ürünler (sadece şubeye özel ve "irsaliyede gelmez" işaretli ürünler): geldiği gün + SKT günü kadar takip edilir
-const tazeUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && u.taze && u.sktGun && u.sube === S.subeId);
+// Taze ürünler (şube ayarlarında "Taze ürünler" olarak seçilen ürünler): geldiği gün + SKT günü kadar takip edilir
+const tazeUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && tazeMi(u.id) && subedeGorunur(u.id, S.subeId));
 function tazeGeldi() {
   const l = tazeUrunleri(); if (!l.length) return;
   openSheet(`<h2>Taze ürün geldi</h2><p class="note">Gelen miktarı yazın, boş bıraktıklarınız kaydedilmez. SKT, tarihten itibaren ürünün SKT günü kadar sayılır.</p>
     <label class="field"><span>Geliş tarihi</span><input type="date" id="tzT" value="${bugun()}"></label>
-    <div class="card">${l.map(u => `<div class="row" style="cursor:default"><div class="m"><b>${esc(u.ad)}</b><span>SKT ${u.sktGun} gün</span></div><input class="tzM" data-u="${u.id}" inputmode="decimal" placeholder="0" style="width:72px;text-align:right"><span class="irr-b">${u.birim === 'adet' ? 'adet' : 'kg'}</span></div>`).join('')}</div>
+    <div class="card">${l.map(u => `<div class="row" style="cursor:default"><div class="m"><b>${esc(u.ad)}</b><span>SKT ${sktGunu(u.id)} gün</span></div><input class="tzM" data-u="${u.id}" inputmode="decimal" placeholder="0" style="width:72px;text-align:right"><span class="irr-b">${u.birim === 'adet' ? 'adet' : 'kg'}</span></div>`).join('')}</div>
     <div class="err" id="tzE"></div><div class="btns"><button class="btn" id="tzK">Kaydet</button></div>`, el => {
     el.querySelector('#tzK').onclick = async () => {
       const t = el.querySelector('#tzT').value; if (!t) return el.querySelector('#tzE').textContent = 'Tarih seçin.';
@@ -917,7 +922,7 @@ function tazeGeldi() {
 }
 function sktEkrani() {
   const sb = sube(); const R = refTarih(); const bg = bugun(); const yarin = gunEkle(bg, 1);
-  const urs = [...subedekiUrunler(sb)].filter(u => S.urunler[u]?.sktGun && S.urunler[u].aktif !== false);
+  const urs = [...subedekiUrunler(sb)].filter(u => sktGunu(u) && S.urunler[u]?.aktif !== false);
   const atik = [], bugunL = [], yarinL = [], yakin = [], coz = [], eksik = [], yok = [];
   for (const u of urs) {
     const d = sktDurum(u); if (!d) continue; if (d.sayimYok) { yok.push(u); continue; } if (d.eksik) eksik.push(u);
@@ -954,7 +959,7 @@ function sktEkrani() {
   $('#app').querySelectorAll('[data-foto]').forEach(b => b.onclick = e => { e.stopPropagation(); fotoAc(b.dataset.foto); });
 }
 // İrsaliyeden sadece SKT'si takip edilen ürünler (hamurlar, donuklar) okunur.
-const sktUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && u.sktGun && !u.taze && subedeGorunur(u.id, S.subeId));
+const sktUrunleri = () => urunlerSirali().filter(u => u.aktif !== false && sktGunu(u.id) && !u.taze && subedeGorunur(u.id, S.subeId));
 function irsaliyeEkle() {
   const anahtar = !!(S.ai.geminiKey || '').trim();
   openSheet(`<h2>İrsaliye ekle</h2><p class="note">Kağıt irsaliyenin fotoğrafı ya da 3SC "Siparişiniz teslim edildi" mailinin ekran görüntüsü. Sadece SKT'si takip edilen ürünler (${sktUrunleri().length}: hamurlar, tabanlar, donuklar) okunur. Birden fazla sayfa seçebilirsiniz.</p>
@@ -1037,7 +1042,7 @@ Kurallar:
     const j = await gemini(parts); if (S.okumaIptal && S.okumaIptal.iptal) return;
     const adId = {}; Object.entries(S.urunler).forEach(([id, x]) => { if (x.aktif !== false && subedeGorunur(id, S.subeId)) adId[ascii(x.ad)] = id; });
     const say = v => v == null || v === '' ? null : (typeof v === 'number' ? v : sayiOku(v));
-    const kal = (j.kalemler || []).map(k => { const tobV = say(k.tob); let miktar = tobV != null && isFinite(tobV) ? tobV : say(k.miktar); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && !S.urunler[u].sktGun) u = null;
+    const kal = (j.kalemler || []).map(k => { const tobV = say(k.tob); let miktar = tobV != null && isFinite(tobV) ? tobV : say(k.miktar); let u = eslesmeBul(k.ad || '') || (k.urun ? adId[ascii(k.urun)] || null : null); if (u && (!sktGunu(u) || S.urunler[u].taze)) u = null;
       const baskaUrun = !u && k.urun && adId[ascii(k.urun)]; // listede var ama SKT takibi yok → atla
       const adS = String(k.ad || '').trim(); const urunVar = !!(u || String(k.urun || '').trim());
       const o = { ad: adS, miktar, u, aiU: u, gida: !baskaUrun && urunVar };
@@ -1397,6 +1402,26 @@ function yeniSube() {
 }
 const isaretKaydet = (id, o) => updateDoc(doc(db, 'subeler', id), { isaret: o }).catch(hata); // merge haritaları birleştirir; silinen kayıt kalmasın diye alan komple değiştirilir
 const subeKaydet = (id, patch) => setDoc(doc(db, 'subeler', id), patch, { merge: true }).catch(hata);
+// Şubede hangi ürünlerin SKT'sinin takip edileceği: ürünlerdeki varsayılandan farklıysa şubeye özel kaydedilir (şube hesabı da değiştirebilir)
+function sktAyar(sid) {
+  const s = S.subeler[sid]; if (!s) return; const isaret = s.isaret || {};
+  const l = [...subedekiUrunler(s)].map(u => ({ id: u, ...S.urunler[u] })).filter(u => u.ad && u.aktif !== false && (u.sktGun || u.taze)).sort((a, b) => (a.sira ?? 999) - (b.sira ?? 999));
+  const gec = u => { const v = isaret[u]?.s; return v == null ? (S.urunler[u].sktGun || null) : (v > 0 ? v : null); };
+  openSheet(`<h2>SKT takibi · ${esc(s.ad)}</h2><p class="note">Sadece bu şubeyi etkiler. Takip etmediğiniz ürünün işaretini kaldırın; gün sayısını bu şube için değiştirebilirsiniz. Listede ürünlerde SKT'si tanımlı olanlar çıkar.</p>
+    <input class="search" id="skA" placeholder="Ara…"><div class="card" style="max-height:50vh;overflow:auto">${l.map(u => `<div class="row" data-ad="${esc(ascii(u.ad))}" style="cursor:default"><label class="chk" style="flex:1;border:0;padding:0"><input type="checkbox" class="skC" data-u="${u.id}" ${gec(u.id) ? 'checked' : ''}><span>${esc(u.ad)}${u.taze ? ' <span class="tag b">taze</span>' : ''}</span></label><input class="skG" data-u="${u.id}" inputmode="numeric" placeholder="gün" value="${gec(u.id) || u.sktGun || ''}" style="width:56px;text-align:right"></div>`).join('') || '<div class="empty" style="padding:20px">SKT\'si tanımlı ürün yok.</div>'}</div>
+    <div class="err" id="skE"></div><div class="btns"><button class="btn" id="skK">Kaydet</button></div>`, el => {
+    el.querySelector('#skA').oninput = e => { const q = ascii(e.target.value); el.querySelectorAll('[data-ad]').forEach(r => r.hidden = q && !r.dataset.ad.includes(q)); };
+    el.querySelector('#skK').onclick = () => {
+      const o = { ...isaret }; let hataM = '';
+      el.querySelectorAll('.skC').forEach(c => { const u = c.dataset.u, varsayilan = S.urunler[u].sktGun || null; const e = { ...(o[u] || {}) };
+        if (!c.checked) e.s = 0;
+        else { const g = Math.round(sayiOku(el.querySelector(`.skG[data-u="${u}"]`).value)); if (!(g > 0)) { hataM = `${urunAd(u)} için SKT gününü yazın.`; return; } if (g === varsayilan) delete e.s; else e.s = g; }
+        if (Object.keys(e).length) o[u] = e; else delete o[u]; });
+      if (hataM) return el.querySelector('#skE').textContent = hataM;
+      s.isaret = o; isaretKaydet(sid, o); closeSheet(); toast('SKT takibi kaydedildi.'); render();
+    };
+  });
+}
 function subeAyar(id, kok) {
   const s = S.subeler[id]; if (!s) { $('#app').innerHTML = ust('Şube', { geri: true }) + '<div class="empty"><b>Şube yok</b></div>'; return bagla(); }
   const ks = s.konumlar || []; const yon = admin();
@@ -1410,9 +1435,11 @@ function subeAyar(id, kok) {
     <div class="sec">Listeler</div><div class="card">
       <button class="row" id="sYer"><div class="m"><b>Ürün yerleri</b><span>Hangi ürün hangi konumda sayılır · tek ekranda</span></div><span class="ch">›</span></button>
       <button class="row" id="sTak" ${yon ? '' : 'hidden'}><div class="m"><b>Sevkiyat takvimi</b><span>${(s.takvim || []).length ? (s.takvim || []).map(t => `${GUNU[t.gun]} (${t.sure} gün)`).join(' · ') : 'girilmemiş'}</span></div><span class="ch">›</span></button>
+      <button class="row" id="sSkt"><div class="m"><b>SKT takibi</b><span>Hangi ürünlerin SKT'si bu şubede takip edilir</span></div><span class="ch">›</span></button>
       <button class="row" id="sSon"><div class="m"><b>Sonuç sırası</b><span>${sonucListesi(s).length} ürün · Domino's sistemindeki sıra</span></div><span class="ch">›</span></button></div>
     <div class="sec" ${yon ? '' : 'hidden'}>Diğer</div><div class="card" ${yon ? '' : 'hidden'}><button class="row" id="sSil"><div class="m"><b style="color:var(--red)">Şubeyi sil</b><span>Şube, ayarları, sayımları ve irsaliyeleri silinir</span></div></button><button class="row" id="sKop"><div class="m"><b>Başka şubeden kopyala</b><span>Konumlar, sonuç sırası ve günlük liste değiştirilir</span></div><span class="ch">›</span></button></div></div>`;
   bagla();
+  if ($('#sSkt')) $('#sSkt').onclick = () => sktAyar(id);
   if (!yon) { $('#sAd').disabled = $('#sHg').disabled = $('#sAk').disabled = true; }
   if (yon) $('#sSil').onclick = () => subeSil(id);
   $('#sAd').onchange = e => { const v = e.target.value.trim(); if (v) subeKaydet(id, { ad: v }); };
@@ -1583,7 +1610,7 @@ function urunlerAyar() {
     <input class="search" id="ua" placeholder="Ara…" value="${esc(S.urunAra || '')}">
 <p class="note" style="margin:0 0 8px"><b>Günlük</b>: günlük sayımda sayılsın (haftalıkta zaten hepsi sayılır). <b>Sipariş</b>: sipariş listesinde çıkar. Burası <b>bütün şubeler için varsayılan</b>; her şube kendi ayarlarından (Günlük / haftalık listesi) kendi için değiştirebilir.</p>
     <div class="fh" id="uf"><span id="usay">${l.length} ürün</span>${[['g', 'Günlük'], ['s', 'Sipariş']].map(([k, ad]) => { const c = (k === 'g' ? S.urunFg : S.urunFs) || 'hepsi'; return `<button class="${c !== 'hepsi' ? 'on' : ''}" data-f="${k}">${ad}${c === 'evet' ? ': var' : c === 'hayir' ? ': yok' : ''} ${c === 'hepsi' ? '▾' : '⏷'}</button>`; }).join('')}</div>
-    <div class="card">${l.map(u => `<div class="row" data-ad="${esc(ascii(u.ad))}" data-gn="${u.gunluk ? 1 : 0}" data-sp="${u.siparis ? 1 : 0}" style="cursor:default"><div class="m" data-u="${u.id}" style="cursor:pointer"><b>${esc(u.ad)}${u.sube ? ` <span class="tag b">sadece ${esc(S.subeler[u.sube]?.ad || u.sube)}</span>` : ''}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''} · ${kullanim[u.id] || 0} şube${u.sktGun ? ` · <span style="color:var(--amber);font-weight:700">SKT ${u.sktGun} gün</span>` : ''}</span></div>
+    <div class="card">${l.map(u => `<div class="row" data-ad="${esc(ascii(u.ad))}" data-gn="${u.gunluk ? 1 : 0}" data-sp="${u.siparis ? 1 : 0}" style="cursor:default"><div class="m" data-u="${u.id}" style="cursor:pointer"><b>${esc(u.ad)}${u.sube ? ` <span class="tag b">sadece ${esc(S.subeler[u.sube]?.ad || u.sube)}</span>` : ''}</b><span>${u.birim}${u.koliIci != null ? ' · koli ' + yaz(u.koliIci) : ''} · ${kullanim[u.id] || 0} şube${u.sktGun ? ` · <span style="color:var(--amber);font-weight:700">SKT ${u.sktGun} gün</span>` : ''}${u.taze ? ' · taze' : ''}</span></div>
       <button class="chip ${u.gunluk ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="gunluk" data-id="${u.id}">${u.gunluk ? '✓ ' : ''}Günlük</button><button class="chip ${u.siparis ? 'on' : ''}" style="padding:5px 9px;font-size:11.5px" data-sy="siparis" data-id="${u.id}">${u.siparis ? '✓ ' : ''}Sipariş</button></div>`).join('')}</div>
     ${kalk.length ? `<details class="card" style="padding:0"><summary class="row" style="list-style:none"><div class="m"><b>Kaldırılan ürünler (${kalk.length})</b><span>Sayımlarda ve listelerde görünmezler · dokunup geri alabilirsiniz</span></div><span class="ch">▾</span></summary>${kalk.map(u => `<button class="row" data-u="${u.id}" data-ad="${esc(ascii(u.ad))}"><div class="m"><b style="color:var(--mut)">${esc(u.ad)}</b><span>${u.kaldirma ? 'kaldırıldı ' + trTarih(u.kaldirma.slice(0, 10)) : 'kaldırıldı'}</span></div></button>`).join('')}</details>` : ''}</div>`;
   bagla();
@@ -1611,7 +1638,8 @@ function urunPanel(id, opt = {}) {
     <label class="field"><span>Koli / paket içi</span><input id="pk" inputmode="decimal" value="${n(u.koliIci)}" placeholder="örn. 0,5"></label>
     <label class="field"><span>SKT (gün)</span><input id="ps" inputmode="numeric" value="${n(u.sktGun)}" placeholder="takip yoksa boş"></label>
     <label class="field"><span>Çözülme (gün)</span><input id="pc" inputmode="numeric" value="${n(u.cozulmeGun)}" placeholder="yoksa boş"></label></div>
-    ${ozel ? `<label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pTz" ${u.taze ? 'checked' : ''}> İrsaliyede gelmez (taze ürün) · SKT'si "Taze ürün geldi" ile girilir</label>` : ''}
+    <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pTz" ${u.taze ? 'checked' : ''}> Taze ürün: irsaliyede gelmez, SKT'si "Taze ürün geldi" ile girilir</label>
+    <p class="note" style="margin:0 0 6px">SKT günü bütün şubelere varsayılan olur; her şube kendi ayarlarından (SKT takibi) kapatabilir ya da günü değiştirebilir.</p>
     <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pGn" ${u.gunluk ? 'checked' : ''}> Günlük sayımda sayılır</label>
     <label class="chk" style="padding:4px 0;border:0"><input type="checkbox" id="pSp" ${u.siparis ? 'checked' : ''}> Sipariş listesinde</label>
     <label class="field"><span>Sipariş kolisi (Domino's sevkiyat kolisi, ${u.birim === 'adet' ? 'adet' : 'kg'})</span><input id="pSk" inputmode="decimal" value="${n(u.sKoli)}" placeholder="örn. sucuk 10, 7 hamur 12"></label>
@@ -1627,8 +1655,7 @@ function urunPanel(id, opt = {}) {
       if (Object.entries(S.urunler).some(([k, x]) => k !== id && x.ad === ad && x.aktif !== false && (!x.sube || !u.sube || x.sube === u.sube))) return el.querySelector('#pe').textContent = 'Bu adda ürün zaten var.';
       const ni = v => { const x = sayiOku(v); return x == null ? null : Math.round(x); };
       const data = { ad, birim: el.querySelector('#pb').value, koliIci: sayiOku(el.querySelector('#pk').value), sktGun: ni(el.querySelector('#ps').value), cozulmeGun: ni(el.querySelector('#pc').value), gunluk: el.querySelector('#pGn').checked, siparis: el.querySelector('#pSp').checked, sKoli: sayiOku(el.querySelector('#pSk').value), aktif: true };
-      if (id && u.dara != null) data.dara = u.dara; if (u.sube) data.sube = u.sube;
-      const tz = el.querySelector('#pTz'); if (tz && tz.checked) { if (!data.sktGun) return el.querySelector('#pe').textContent = 'Taze ürün için SKT (gün) yazın.'; data.taze = true; }
+      if (id && u.dara != null) data.dara = u.dara; if (u.sube) data.sube = u.sube; if (el.querySelector('#pTz').checked) data.taze = true;
       const yid = id || yeniId('u'); if (!id) data.sira = Math.max(0, ...Object.values(S.urunler).map(x => x.sira ?? 0)) + 1; else data.sira = u.sira ?? 999;
       try {
         if (Object.keys(S.urunler).length) await updateDoc(doc(db, 'genel', 'urunler'), { ['u.' + yid]: data }); else await setDoc(doc(db, 'genel', 'urunler'), { u: { [yid]: data } });
