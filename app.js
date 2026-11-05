@@ -451,7 +451,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v35';
+const SURUM = 'v36';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -1343,10 +1343,10 @@ function siparisEkrani() {
   const satir = u => { const x = S.urunler[u]; const ideal = T.ideal[u]; const sonEl = eldeBul(u); const elElle = !sayimdaMi(sb, u, 'gunluk'); const ov = elElle ? T.elde[u] : null; const el = ov != null ? { t: ov } : sonEl; const kBos = !(x.sKoli > 0); const k = kBos ? null : x.sKoli;
     const hedef = ideal != null ? r6(ideal / D * (D + buff + (anaMi(u) ? anaMiktar() : 0))) : null; const koli = hedef != null && el && k ? r6((hedef - el.t) / k) : null; const oneri = koli != null ? Math.max(0, Math.ceil(koli)) : '';
     const n = v => v == null ? '–' : fmt(v, x.birim === 'adet' ? 'adet' : 'kg');
-    return `<tr><td style="text-align:left;font-weight:600;font-size:12.5px">${esc(x.ad)}<div class="note" style="margin:0;font-size:10.5px">${kBos ? '<b style="color:var(--amber)">koli boş!</b>' : 'koli ' + yaz(k)}</div></td>
+    return `<tr><td style="text-align:left;font-weight:600;font-size:12.5px">${esc(x.ad)}<div class="note" style="margin:0;font-size:10.5px"><span class="spMh">hedef ${n(hedef)} · </span>${kBos ? '<b style="color:var(--amber)">koli boş!</b>' : 'koli ' + yaz(k)}</div></td>
       <td><input class="spI" data-u="${u}" inputmode="decimal" enterkeyhint="next" value="${yaz(ideal)}" style="width:62px"></td>
-      <td>${n(hedef)}</td><td>${elElle ? `<input class="spE" data-u="${u}" inputmode="decimal" enterkeyhint="next" value="${yaz(ov)}" placeholder="${sonEl ? yaz(sonEl.t) : 'yaz'}" title="Elle yazın; boşsa son sayım kullanılır" style="width:58px;border-color:var(--amber)">` : el ? n(el.t) : '<span style="color:var(--amber)">yok</span>'}</td>
-      <td class="${koli != null && koli <= 0 ? 'neg' : 'b'}">${kBos ? '<span style="color:var(--amber);font-size:11px">koli?</span>' : koli == null ? '–' : koli <= 0 ? 'yeter' : yaz(Math.round(koli * 10) / 10)}</td>
+      <td>${n(hedef)}</td><td>${elElle ? `<input class="spE" data-u="${u}" inputmode="decimal" enterkeyhint="next" value="${yaz(ov)}" placeholder="${sonEl ? yaz(sonEl.t) : 'yaz'}" title="Elle yazın; boşsa son sayım kullanılır" style="width:58px;border-color:var(--amber)">` : `<span class="cel">${el ? n(el.t) : '<span style="color:var(--amber)">yok</span>'}</span>`}</td>
+      <td class="${koli != null && koli <= 0 ? 'neg' : 'b'}"><span class="cel">${kBos ? '<span style="color:var(--amber);font-size:11px">koli?</span>' : koli == null ? '–' : koli <= 0 ? 'yeter' : yaz(Math.round(koli * 10) / 10)}</span></td>
       <td><input class="spL" data-u="${u}" inputmode="numeric" enterkeyhint="next" value="${T.liste[u] ?? ''}" placeholder="${oneri}" style="width:50px;font-weight:800"></td></tr>`; };
   const son = [...S.sayimlar].sort((a, b) => sonZaman(b).localeCompare(sonZaman(a)))[0];
   const eskiSayim = !son || son.tarih < gunEkle(isGunu(), 0);
