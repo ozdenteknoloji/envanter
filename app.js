@@ -53,6 +53,8 @@ const S = { ai: {}, ayar: {}, ayarYuklendi: false, eslesme: {}, irsaliyeler: [],
   f: null, buf: null, ek: null, unsub: {}, temizlendi: {}
 };
 const admin = () => S.me && S.me.rol === 'admin';
+// Yeni ana ekran (alt menüsüz, kartlı) şimdilik test için sadece yönetici hesabında; hesap penceresinden kapatılabilir
+const yeniAna = () => { if (!admin()) return false; try { return localStorage.getItem('env_yeniAna') !== '0'; } catch (e) { return true; } };
 const benAd = () => (S.me && (S.me.ad || S.me.kullaniciAdi)) || '';
 const subeIds = () => admin() ? Object.keys(S.subeler).filter(id => S.subeler[id].aktif !== false).sort((a, b) => S.subeler[a].ad.localeCompare(S.subeler[b].ad, 'tr')) : (S.me?.subeler || []).filter(id => S.subeler[id]);
 const sube = () => S.subeler[S.subeId];
@@ -385,7 +387,8 @@ function render0() {
   if (S.git && S.me && S.urunYuklendi && subeIds().length && (!S.git.sube || S.subeler[S.git.sube])) gitUygula();
   if (!admin() && !S.subeSecildi && S.subelerYuklendi && subeIds().length > 1) return subeSecimEkrani();
   if (S.syId) return editor();
-  sekmeler();
+  document.body.classList.toggle('yeni', yeniAna());
+  if (yeniAna()) $('#tabs').hidden = true; else sekmeler();
   if (S.tab === 'ayarlar') return ayarlar();
   if (!S.urunYuklendi) { app.innerHTML = ust('Envanter') + `<div class="empty"><b>Yükleniyor…</b></div>`; return; }
   if (!S.subeId) { app.innerHTML = ust('Envanter') + `<div class="empty"><b>Şube yok</b>${admin() ? 'Ayarlar → Şubeler bölümünden şube ekleyin.' : 'Hesabınıza şube atanmamış. Yöneticiye haber verin.'}</div>`; bagla(); return; }
@@ -406,10 +409,12 @@ function sekmeler() {
 function ust(baslik, opt = {}) {
   const ids = subeIds(); const sb = sube();
   const sag = opt.sag ?? (opt.subeSecici !== false && ids.length > 1 && sb ? `<button id="subeBtn">${esc(sb.ad)} ▾</button>` : '') + `<button id="hesapBtn" title="Hesap">☺</button>`;
-  return `<header class="top">${opt.geri ? `<button class="back" id="geriBtn">‹</button>` : ''}<h1>${esc(baslik)}${opt.alt ? `<div class="sub">${esc(opt.alt)}</div>` : ''}</h1>${sag}</header>${navigator.onLine === false ? '<div class="off">İnternet yok — yazdıklarınız telefonda tutuluyor, bağlantı gelince kaydedilecek.</div>' : ''}`;
+  const anaDon = !opt.geri && yeniAna() && S.tab !== 'sayim'; // yeni ana ekranda alt menü yok: SKT / Sipariş / Ayarlar'dan ana ekrana dönüş
+  return `<header class="top">${opt.geri ? `<button class="back" id="geriBtn">‹</button>` : anaDon ? `<button class="back" id="anaBtn">‹</button>` : ''}<h1>${esc(baslik)}${opt.alt ? `<div class="sub">${esc(opt.alt)}</div>` : ''}</h1>${sag}</header>${navigator.onLine === false ? '<div class="off">İnternet yok — yazdıklarınız telefonda tutuluyor, bağlantı gelince kaydedilecek.</div>' : ''}`;
 }
 function bagla() {
   const g = $('#geriBtn'); if (g) g.onclick = geri;
+  const a = $('#anaBtn'); if (a) a.onclick = () => gecmis.length ? history.back() : setTab('sayim');
   const s = $('#subeBtn'); if (s) s.onclick = subeSecPaneli;
   const h = $('#hesapBtn'); if (h) h.onclick = hesapPaneli;
 }
@@ -446,7 +451,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v32';
+const SURUM = 'v33';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -476,9 +481,11 @@ function hesapPaneli() {
     <p class="note">Sabah 10:30'da SKT özeti, akşam 22:00'de unutulan irsaliye hatırlatması. iPhone'da önce uygulamayı ana ekrana ekleyin.</p>
     <div id="bdM" class="note"></div>
     <div class="btns"><button class="btn alt" id="bdAc">🔔 Bu telefonda bildirimleri aç</button></div>
+    ${admin() ? `<div class="sec">Test</div><label class="chk" style="padding:6px 0;border:0"><input type="checkbox" id="yeniAnaC" ${yeniAna() ? 'checked' : ''}> Yeni ana ekran (sadece yönetici hesabında görünür)</label>` : ''}
     <div class="btns"><button class="btn red" id="cik">Çıkış yap</button></div>
     <p class="note" style="text-align:center;margin:10px 0 0;font-size:12px">Sürüm ${SURUM}</p>`, el => {
     el.querySelector('#cik').onclick = () => { closeSheet(); signOut(auth); };
+    const ya = el.querySelector('#yeniAnaC'); if (ya) ya.onchange = () => { try { localStorage.setItem('env_yeniAna', ya.checked ? '1' : '0'); } catch (e) { } closeSheet(); setTab('sayim'); };
     el.querySelector('#bdAc').onclick = () => bildirimAc(el.querySelector('#bdM'));
     el.querySelector('#sKay').onclick = async () => {
       const a = el.querySelector('#s0').value, b = el.querySelector('#s1').value; const er = el.querySelector('#se');
@@ -548,6 +555,7 @@ function ilerleme(sy, sb) { let n = 0, say = 0; for (const k of kapsam(sb, sy.tu
 function sayimListesi() {
   if (S.ar === 'gecmis') return sayimGecmisi();
   if (S.ar === 'sonuc') return sonucEkrani();
+  if (yeniAna()) return anaEkran();
   const sb = sube(); const bg = isGunu(); const hg = sb.haftalikGun ?? 6; const haftalikGunu = haftaGunu(bg) === hg;
   const bugunku = t => S.sayimlar.find(s => s.id === `${S.subeId}_${bg}_${t}`);
   const konumBos = !(sb.konumlar || []).some(k => (k.satirlar || []).length);
@@ -897,6 +905,115 @@ function sktEtiket(u, sy) {
   if (d.eksik) return yarinEt || `<span class="tag" style="display:inline-block;margin-top:3px" title="Atık hesabı için irsaliye geçmişi henüz yeterli değil">yakın SKT yok</span>`;
   return `<span class="tag g" style="display:inline-block;margin-top:3px">SKT yok</span>${yarinEt ? ' ' + yarinEt : ''}`;
 }
+/* ================= Yeni ana ekran (test: şimdilik sadece yönetici hesabında) =================
+   Alt menü yok; her iş bir kart: Günlük / Haftalık Sayım, SKT Takibi, Commissary Siparişi.
+   Sayım kartını sola kaydırınca Sonuç: kısa kaydır → düğme, uzun kaydır → doğrudan açılır. */
+const IKON = {
+  gun: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/>',
+  hafta: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/>',
+  skt: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  kamyon: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+  sonuc: '<path d="M10 6h11M10 12h11M10 18h11"/><path d="M4 6h1v4M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>',
+  ayar: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  yardim: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
+  uyari: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/>'
+};
+const ikon = (k, c = '') => `<svg class="aki ${c}" viewBox="0 0 24 24">${IKON[k]}</svg>`;
+const OKTAN = '<svg viewBox="0 0 24 24"><defs><linearGradient id="okg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs><path d="M8.2 2h7.6L22 8.2v7.6L15.8 22H8.2L2 15.8V8.2z" fill="none" stroke="url(#okg)" stroke-width="2.6" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="url(#okg)"/></svg>';
+// Haftalık sayımın içinde bulunduğumuz haftası: son haftalık sayım gününden bugüne
+const haftaBasi = sb => { const bg = isGunu(); const hg = sb.haftalikGun ?? 6; return gunEkle(bg, -((haftaGunu(bg) - hg + 7) % 7)); };
+// Kartın sayımı: günlükte bugünkü, haftalıkta bu haftanınki. Yoksa kart kaydırılamaz (sonuç yok).
+function kartSayimi(sb, tur) {
+  const bg = isGunu(); const sinir = tur === 'gunluk' ? bg : haftaBasi(sb);
+  return S.sayimlar.filter(s => s.tur === tur && s.tarih >= sinir && s.tarih <= bg).sort((a, b) => b.tarih.localeCompare(a.tarih))[0] || null;
+}
+function sktSayilari(sb) {
+  const bg = bugun(); const yarin = gunEkle(bg, 1); const o = { atik: 0, bugun: 0, yarin: 0 };
+  for (const u of subedekiUrunler(sb)) {
+    if (!sktGunu(u) || S.urunler[u]?.aktif === false) continue;
+    const d = sktDurum(u); if (!d || d.sayimYok) continue;
+    if (d.atik > 0) o.atik++;
+    let b = false, y = false;
+    for (const p of d.gecerli || []) { if (p.a <= 0 || (p.coz && p.coz > bg)) continue; if (p.son <= bg) b = true; else if (p.son === yarin) y = true; }
+    if (b) o.bugun++; if (y) o.yarin++;
+  }
+  return o;
+}
+function anaEkran() {
+  const sb = sube(); const bg = isGunu(); const hg = sb.haftalikGun ?? 6; const haftalikGunu = haftaGunu(bg) === hg;
+  const konumBos = !(sb.konumlar || []).some(k => (k.satirlar || []).length);
+  const sayimDurum = (tur, sy) => {
+    if (sy && sy.durum === 'bitti') return `<span class="pill g">✓ Bitti · ${tur === 'gunluk' ? 'bugün ' + saat(sy.son || sy.basla) : esc(trTarih(sy.tarih))}</span>`;
+    if (sy) { const i = ilerleme(sy, sb); return `<span class="pill b">Devam ediyor</span><span class="bar2"><i style="width:${i.n ? Math.round(i.say / i.n * 100) : 0}%"></i></span><span class="mut">${i.say}/${i.n}</span>`; }
+    if (tur === 'gunluk') return '<span class="pill">Bugün henüz başlanmadı</span>';
+    return haftalikGunu ? '<span class="pill b">Bugün haftalık sayım günü</span>' : `<span class="pill">Sayım günü: ${GUNU[hg]}</span>`;
+  };
+  const kart = (o) => {
+    const ic = `<div class="ak${o.ana ? ' ana' : ''}${o.sy ? ' kayar' : ''}" role="button" tabindex="0" data-k="${o.k}"><div class="ic" style="background:${o.renk}">${ikon(o.ikon)}</div><div class="m"><b>${o.b}</b><span class="d">${o.d}</span><div class="st">${o.st}</div></div><span class="ch">›</span></div>`;
+    if (!o.sy) return `<div class="ak-sw">${ic}</div>`;
+    const t = o.k === 'gunluk' ? 'bugün' : kisaT(o.sy.tarih);
+    return `<div class="ak-sw" data-son="${o.sy.id}"><div class="ak-alt"><div class="ak-qb qk">${ikon('sonuc')}Sonuç<small>${t}</small></div><div class="ak-qb qu">${ikon('sonuc')}<span>Bırak, sonuç açılsın<small>${esc(TUR[o.sy.tur])} · ${t}</small></span></div></div><div class="ak-tab"><span>‹ SONUÇ</span></div>${ic}</div>`;
+  };
+  const gSy = kartSayimi(sb, 'gunluk'), hSy = kartSayimi(sb, 'haftalik');
+  const n = sktSayilari(sb); const sp = (sb.takvim || []).length ? siparisGunleri(sb)[0] : null;
+  const sktSt = !S.irsaliyeler.length ? '<span class="pill a">Henüz irsaliye yok</span>'
+    : (n.atik ? `<span class="pill r">${n.atik} atık</span>` : '') + (n.bugun ? `<span class="pill r">${n.bugun} bugün</span>` : '') + (n.yarin ? `<span class="pill a">${n.yarin} yarın</span>` : '') || '<span class="pill g">SKT\'si yaklaşan yok</span>';
+  const spSt = !sp ? '<span class="pill a">Sevkiyat takvimi girilmemiş</span>' : sp.tarih === bg ? '<span class="pill b">Bugün sipariş günü</span>' : `<span class="pill">Sıradaki: ${GUNU[haftaGunu(sp.tarih)]} ${kisaT(sp.tarih)}</span>`;
+  const eks = eksikIrsaliyeler(sb);
+  $('#app').innerHTML = ust('Envanter', { alt: trTarih(bg) }) + `<div class="pad ana-pad">
+    ${eks.length ? `<div class="uyari">${ikon('uyari', 's')}<div class="m"><b>${eks.map(o => trTarih(o.sevk)).join(', ')} sevkiyatının irsaliyesi girilmedi</b><span>SKT hesabı eksik kalır</span></div><button class="btn" id="irEkleA">Ekle</button></div>` : ''}
+    ${konumBos ? `<div class="card p"><b>Bu şubenin konumlarına henüz ürün eklenmemiş.</b><p class="note">Ayarlar → Şubeler bölümünden ekleyin.</p></div>` : ''}
+    ${kart({ k: 'gunluk', ikon: 'gun', renk: '#1d4ed8', b: 'Günlük Sayım', d: 'Seçili ürünler · her gün', st: sayimDurum('gunluk', gSy), sy: gSy, ana: !haftalikGunu })}
+    ${kart({ k: 'haftalik', ikon: 'hafta', renk: '#15803d', b: 'Haftalık Sayım', d: `Bütün ürünler · ${GUNU[hg]} günleri`, st: sayimDurum('haftalik', hSy), sy: hSy, ana: haftalikGunu })}
+    ${kart({ k: 'skt', ikon: 'skt', renk: '#c2410c', b: 'SKT Takibi', d: 'Son kullanma tarihleri · irsaliye ekle', st: sktSt })}
+    ${kart({ k: 'siparis', ikon: 'kamyon', renk: '#0f766e', b: 'Commissary Siparişi', d: 'Bir sonraki sevkiyatın hesabı', st: spSt })}
+    <div class="ak-alt2"><button id="akAyar">${ikon('ayar', 's')}${admin() ? 'Ayarlar' : 'Şube ayarları'}</button><button id="akYardim">${ikon('yardim', 's')}Nasıl kullanılır?</button></div>
+    <div class="oktan"><span>powered by</span>${OKTAN}<b>OKTAN</b></div></div>`;
+  bagla();
+  const ir = $('#irEkleA'); if (ir) ir.onclick = () => { go({ tab: 'skt', ar: null }); irsaliyeEkle(); };
+  $('#akAyar').onclick = () => go({ tab: 'ayarlar', ar: null });
+  $('#akYardim').onclick = yardimPaneli;
+  const sayimAc = async t => {
+    if (konumBos || !kapsam(sb, t).length) { toast(`${TUR[t]} sayılacak ürün seçilmemiş.`, true); return; }
+    const sy = kartSayimi(sb, t); if (sy) return go({ syId: sy.id });
+    if (t === 'haftalik' && !haftalikGunu && !(await onayla(`Bugün ${GUNU[haftaGunu(bg)]}; haftalık sayım günü ${GUNU[hg]}. Yine de bütün ürünlerin sayıldığı haftalık sayım başlatılsın mı?`, 'Başlat'))) return;
+    sayimBaslat(t);
+  };
+  const tik = { gunluk: () => sayimAc('gunluk'), haftalik: () => sayimAc('haftalik'), skt: () => go({ tab: 'skt', ar: null }), siparis: () => go({ tab: 'siparis', ar: null }) };
+  $('#app').querySelectorAll('.ak-sw').forEach(sw => { const k = sw.querySelector('.ak'); const f = tik[k.dataset.k];
+    k.onkeydown = e => { if (e.key === 'Enter') f(); };
+    if (sw.dataset.son) kaydirmaKur(sw, f, () => { S.sonucId = sw.dataset.son; go({ tab: 'sayim', ar: 'sonuc' }); }); else k.onclick = f; });
+}
+// Sola kaydırma: kısa kaydırınca "Sonuç" düğmesi açık kalır, kartın yarısından fazla kaydırınca bırakır bırakmaz sonuç açılır.
+function kaydirmaKur(sw, tik, ac) {
+  const kart = sw.querySelector('.ak'); const ACIK = 104; let x0 = 0, y0 = 0, dx = 0, mod = 0, acik = false, id = null, bas = 0, suruklendi = false;
+  const yer = (v, anim) => { kart.style.transition = anim ? 'transform .22s ease' : 'none'; kart.style.transform = v ? `translateX(${v}px)` : ''; };
+  const kapat = () => { acik = false; yer(0, true); sw.classList.remove('acik', 'kayiyor', 'uzun'); };
+  kart.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.button !== 0) return; x0 = e.clientX; y0 = e.clientY; dx = acik ? -ACIK : 0; mod = 0; id = e.pointerId; bas = dx; suruklendi = false; });
+  kart.addEventListener('pointermove', e => {
+    if (e.pointerId !== id) return; const mx = e.clientX - x0, my = e.clientY - y0;
+    if (!mod) { if (Math.abs(mx) < 8 && Math.abs(my) < 8) return; mod = Math.abs(mx) > Math.abs(my) * 1.2 ? 1 : 2; if (mod === 1) { suruklendi = true; try { kart.setPointerCapture(id); } catch (x) { } sw.classList.add('kayiyor'); } }
+    if (mod !== 1) return; dx = Math.min(0, bas + mx); yer(dx, false); sw.classList.toggle('uzun', -dx > sw.offsetWidth * .55);
+  });
+  kart.addEventListener('pointerup', e => {
+    if (e.pointerId !== id) return; id = null; if (mod !== 1) return;
+    if (-dx > sw.offsetWidth * .55) { yer(-sw.offsetWidth, true); setTimeout(() => { kapat(); ac(); }, 200); return; }
+    acik = -dx > 40; yer(acik ? -ACIK : 0, true); sw.classList.toggle('acik', acik); sw.classList.remove('uzun'); if (!acik) sw.classList.remove('kayiyor');
+  });
+  kart.addEventListener('pointercancel', e => { if (e.pointerId !== id) return; id = null; if (mod === 1) kapat(); });
+  kart.addEventListener('click', () => { if (suruklendi) { suruklendi = false; return; } if (acik) return kapat(); tik(); });
+  sw.querySelector('.ak-alt').addEventListener('click', ac);
+  sw.querySelector('.ak-tab').addEventListener('click', e => { e.stopPropagation(); ac(); });
+}
+function yardimPaneli() {
+  const adim = (n, b, t) => `<div class="adim"><div class="n">${n}</div><div><b>${b}</b><span>${t}</span></div></div>`;
+  openSheet(`<h2>Nasıl kullanılır?</h2><p class="note" style="margin:0 0 6px">Bir günde yapılacaklar, sırasıyla:</p>
+    ${adim(1, 'İrsaliye gelince fotoğrafını çek', 'SKT Takibi → İrsaliye ekle. Uygulama hamur ve SKT\'li ürünleri kendisi okur.')}
+    ${adim(2, 'Günlük sayımı yap', 'Koli sayısını yaz, İleri\'ye bas. Açık ürün varsa ekstrayı yaz. Haftalık sayım günü bütün ürünler sayılır.')}
+    ${adim(3, 'Sonucu Pulse\'a gir', 'Sayım kartını sola kaydır → Sonuç. Liste Pulse\'taki sırayla aynıdır, yukarıdan aşağı gir.')}
+    ${adim(4, 'SKT\'si gelenleri kontrol et', 'Her sabah 10:30\'da telefona bildirim gelir. Kırmızılar önce.')}
+    <div class="btns"><button class="btn" id="yrT">Anladım</button></div>`, el => { el.querySelector('#yrT').onclick = closeSheet; });
+}
 function sktEkrani() {
   const sb = sube(); const R = refTarih(); const bg = bugun(); const yarin = gunEkle(bg, 1);
   const urs = [...subedekiUrunler(sb)].filter(u => sktGunu(u) && S.urunler[u]?.aktif !== false);
@@ -913,7 +1030,7 @@ function sktEkrani() {
   const son = [...S.sayimlar].sort((a, b) => sonZaman(b).localeCompare(sonZaman(a)))[0];
   const irs = S.irsaliyeler.slice(0, irsSakla()).map(ir => `<button class="row" data-ir="${ir.id}"><div class="m"><b>${trTarih(ir.tarih)}</b><span>${esc(ir.no || 'numarasız')} · ${(ir.kalemler || []).length} kalem · ${esc(ir.ekleyen || '')}</span></div>${ir.foto > 0 ? `<span class="fotoB" data-foto="${ir.id}" role="button" aria-label="Fotoğrafı aç">📷</span>` : ''}<span class="ch">›</span></button>`).join('');
   const hicbir = !atik.length && !bugunL.length && !yarinL.length && !yakin.length && !coz.length;
-  $('#app').innerHTML = ust(`${sb.ad} · SKT`, { alt: `${kisaT(R)}${R !== bg ? ' (yarın)' : ''}'e göre · ${son ? 'son sayım ' + kisaT(son.tarih) + ' ' + saat(sonZaman(son)) : 'sayım yok'}` }) + `<div class="pad">
+  $('#app').innerHTML = ust(yeniAna() ? 'SKT Takibi' : `${sb.ad} · SKT`, { alt: `${yeniAna() ? sb.ad + ' · ' : ''}${kisaT(R)}${R !== bg ? ' (yarın)' : ''}'e göre · ${son ? 'son sayım ' + kisaT(son.tarih) + ' ' + saat(sonZaman(son)) : 'sayım yok'}` }) + `<div class="pad">
     ${eksikIrsKutusu(sb)}
     <div class="btns" style="margin:0 0 6px"><button class="btn" id="irEkle">+ İrsaliye ekle</button><button class="btn alt" id="opBtn">💬 Paylaş</button></div>
     ${!S.irsaliyeler.length ? `<div class="card p" style="background:var(--amber-soft);border-color:transparent"><b style="color:var(--amber)">Henüz irsaliye yok</b><p class="note">SKT hesabı için gelen her irsaliyeyi ekleyin. Atık hesabı, ürünün SKT süresi kadar geriye irsaliye kaydı birikince başlar.</p></div>` : ''}
@@ -1194,7 +1311,7 @@ const idealAralik = (tarih, sure) => ({ bas: gunEkle(tarih, -6), son: gunEkle(ta
 function eldeBul(u) { const st = stokBul(u); if (!st) return null; let t = st.t; for (const ir of S.irsaliyeler) if (ir.tarih > st.sy.tarih) for (const k of ir.kalemler || []) if (k.u === u) t += k.miktar; return { t: r6(t), sy: st.sy }; }
 function siparisEkrani() {
   const sb = sube(); const gunler = siparisGunleri(sb);
-  if (!(sb.takvim || []).length) { $('#app').innerHTML = ust(`${sb.ad} · Sipariş`) + `<div class="empty"><b>Sevkiyat takvimi girilmemiş</b>${admin() ? 'Ayarlar → Şube → Sevkiyat takvimi bölümünden sipariş günlerini girin.' : 'Yöneticiye haber verin.'}</div>`; return bagla(); }
+  if (!(sb.takvim || []).length) { $('#app').innerHTML = ust(yeniAna() ? 'Commissary Siparişi' : `${sb.ad} · Sipariş`, { alt: yeniAna() ? sb.ad : '' }) + `<div class="empty"><b>Sevkiyat takvimi girilmemiş</b>${admin() ? 'Ayarlar → Şube → Sevkiyat takvimi bölümünden sipariş günlerini girin.' : 'Yöneticiye haber verin.'}</div>`; return bagla(); }
   if (!S.spTarih || !gunler.find(g => g.tarih === S.spTarih)) S.spTarih = gunler[0].tarih;
   const g = gunler.find(x => x.tarih === S.spTarih); const D = g.sure; const ar = idealAralik(g.tarih, D);
   const id = `${S.subeId}_${g.tarih}`; const kayit = S.siparisler.find(x => x.id === id) || {}; const taslakKur = () => ({ id, z: kayit.zaman || '', kirli: false, ideal: { ...(kayit.ideal || {}) }, liste: { ...(kayit.liste || {}) }, elde: { ...(kayit.elde || {}) }, buff: kayit.buff ?? 0.5, not: kayit.not || '' });
@@ -1214,7 +1331,7 @@ function siparisEkrani() {
       <td><input class="spL" data-u="${u}" inputmode="numeric" enterkeyhint="next" value="${T.liste[u] ?? ''}" placeholder="${oneri}" style="width:50px;font-weight:800"></td></tr>`; };
   const son = [...S.sayimlar].sort((a, b) => sonZaman(b).localeCompare(sonZaman(a)))[0];
   const eskiSayim = !son || son.tarih < gunEkle(isGunu(), 0);
-  $('#app').innerHTML = ust(`${sb.ad} · Sipariş`, { alt: `${trTarih(g.tarih)} siparişi · gün sayısı ${D}` }) + `<div class="pad sp">
+  $('#app').innerHTML = ust(yeniAna() ? 'Commissary Siparişi' : `${sb.ad} · Sipariş`, { alt: `${yeniAna() ? sb.ad + ' · ' : ''}${trTarih(g.tarih)} siparişi · gün sayısı ${D}` }) + `<div class="pad sp">
     <div style="display:flex;gap:8px;align-items:center">${gunler.length > 1 ? `<div class="chips" style="flex:1;min-width:0">${gunler.slice(0, 4).map(x => `<button class="chip ${x.tarih === g.tarih ? 'on' : ''}" data-t="${x.tarih}">${trTarih(x.tarih).split(' ').slice(0, 3).join(' ')}</button>`).join('')}</div>` : '<div style="flex:1"></div>'}
       <select id="spB" title="Buff (gün): hedef = ideal ÷ gün × (gün + buff)" style="flex:0 0 auto;padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:inherit;font-weight:700;font:inherit">${[...new Set([...buffListe(), buff])].sort((a, b) => a - b).map(b => `<option value="${b}" ${b === buff ? 'selected' : ''}>Buff ${yaz(b)}</option>`).join('')}</select></div>
     <div class="card p" style="background:var(--blue-soft);border-color:transparent">Domino's'tan ideali <b style="color:var(--blue)">${trTarih(ar.bas)} – ${trTarih(ar.son)}</b> aralığıyla alın (${D} gün).</div>

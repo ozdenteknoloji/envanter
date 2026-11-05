@@ -205,3 +205,46 @@ body.upd .ed .top{top:auto}
 .fv-p img{display:block;width:100%;height:auto;margin-bottom:8px}
 .fv-p.zoom img{width:240%;max-width:none}
 .fv-yuk{padding:40px;text-align:center;color:#9aa0a8}
+/* ===== Yeni ana ekran (kartlı, alt menüsüz) ===== */
+body.yeni .app{padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+.ana-pad{padding-top:14px}
+.aki{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.aki.s{width:18px;height:18px}
+.ak-sw{position:relative;margin:0 0 10px;border-radius:16px}
+.ak{display:flex;align-items:center;gap:14px;padding:15px 14px;background:var(--surface);border:1px solid var(--line);border-radius:16px;cursor:pointer;position:relative;z-index:1;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.ak.ana{border:2px solid var(--blue)}
+.ak .ic{width:52px;height:52px;border-radius:14px;color:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.ak .m{flex:1;min-width:0}
+.ak .m b{display:block;font-size:17px;font-weight:800;letter-spacing:-.01em}
+.ak .m .d{display:block;font-size:13px;color:var(--mut);margin-top:2px}
+.ak .st{display:flex;gap:6px;align-items:center;margin-top:8px;font-size:12.5px;font-weight:700;flex-wrap:wrap}
+.ak .st .mut{color:var(--mut)}
+.ak .ch{color:var(--mut);font-size:22px}
+.ak.kayar{padding-right:36px}.ak.kayar .ch{display:none}
+.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:800;background:var(--soft);color:var(--mut);white-space:nowrap}
+.pill.r{background:var(--red-soft);color:var(--red)}.pill.a{background:var(--amber-soft);color:var(--amber)}.pill.g{background:var(--green-soft);color:var(--green)}.pill.b{background:var(--blue-soft);color:var(--blue)}
+.bar2{display:block;height:6px;border-radius:4px;background:var(--soft);overflow:hidden;flex:1;min-width:40px;max-width:160px}.bar2 i{display:block;height:100%;background:var(--blue);border-radius:4px}
+.ak-alt{position:absolute;inset:0;border-radius:16px;background:var(--blue);display:flex;align-items:center;justify-content:flex-end;padding-right:12px;color:#fff;cursor:pointer;visibility:hidden}
+.ak-sw.kayiyor .ak-alt,.ak-sw.acik .ak-alt{visibility:visible}
+.ak-qb{display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:800;font-size:14px;width:84px;text-align:center}
+.ak-qb small{display:block;font-size:11px;font-weight:600;opacity:.85}
+.ak-qb.qu{display:none;flex-direction:row;width:auto;gap:10px;text-align:left;font-size:15px;padding-right:6px}
+.ak-sw.uzun .ak-qb.k{display:none}.ak-sw.uzun .ak-qb.qu{display:flex}
+.ak-tab{position:absolute;right:0;top:0;bottom:0;width:26px;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;border-radius:0 16px 16px 0;z-index:2;cursor:pointer}
+.ak-tab span{writing-mode:vertical-rl;font-size:10.5px;font-weight:800;letter-spacing:.12em}
+.ak-sw.kayiyor .ak-tab,.ak-sw.acik .ak-tab{display:none}
+.ak-sw.kayiyor .ak,.ak-sw.acik .ak{box-shadow:6px 0 16px rgba(0,0,0,.18)}
+.uyari{display:flex;gap:10px;align-items:center;background:var(--amber-soft);border-radius:14px;padding:12px;margin:0 0 12px;color:var(--amber)}
+.uyari .m{flex:1;min-width:0}.uyari b{display:block;font-size:13.5px}.uyari span{font-size:12px;opacity:.9}
+.uyari .btn{width:auto;padding:9px 14px;font-size:13px;background:var(--amber);color:#fff;border-radius:10px}
+@media (prefers-color-scheme:dark){.uyari .btn{color:#1a1205}}
+.ak-alt2{display:flex;gap:8px;margin-top:4px}
+.ak-alt2 button{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px;font-weight:700;font-size:13.5px;color:var(--mut);cursor:pointer}
+.oktan{display:flex;justify-content:flex-end;align-items:center;gap:6px;margin:22px 6px 4px;color:var(--mut)}
+.oktan span{font-size:10.5px;letter-spacing:.04em;opacity:.85}
+.oktan b{font-size:12px;font-weight:800;letter-spacing:.2em;color:var(--ink);opacity:.75}
+.oktan svg{width:15px;height:15px}
+.adim{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.adim:last-of-type{border-bottom:0}
+.adim .n{width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;font-size:14px}
+.adim b{display:block;font-size:14.5px}.adim span{display:block;font-size:12.5px;color:var(--mut);margin-top:2px;line-height:1.4}
