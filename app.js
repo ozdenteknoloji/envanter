@@ -53,8 +53,8 @@ const S = { ai: {}, ayar: {}, ayarYuklendi: false, eslesme: {}, irsaliyeler: [],
   f: null, buf: null, ek: null, unsub: {}, temizlendi: {}
 };
 const admin = () => S.me && S.me.rol === 'admin';
-// Yeni ana ekran (alt menüsüz, kartlı) şimdilik test için sadece yönetici hesabında; hesap penceresinden kapatılabilir
-const yeniAna = () => { if (!admin()) return false; try { return localStorage.getItem('env_yeniAna') !== '0'; } catch (e) { return true; } };
+// Ana ekran kartlı, alt menüsüz (v35'ten itibaren herkeste). Eski sekmeli görünümün kodu yedek olarak duruyor.
+const yeniAna = () => true;
 const benAd = () => (S.me && (S.me.ad || S.me.kullaniciAdi)) || '';
 const subeIds = () => admin() ? Object.keys(S.subeler).filter(id => S.subeler[id].aktif !== false).sort((a, b) => S.subeler[a].ad.localeCompare(S.subeler[b].ad, 'tr')) : (S.me?.subeler || []).filter(id => S.subeler[id]);
 const sube = () => S.subeler[S.subeId];
@@ -451,7 +451,7 @@ async function bildirimAc(msg, deneme) {
 }
 const serverNow = () => new Date().toISOString();
 // Sürüm notu: her güncellemede bir artırılır (hesap penceresinin altında görünür), güncellemenin geldiğini görmek için.
-const SURUM = 'v34';
+const SURUM = 'v35';
 /* Güncelleme uyarısı: açık kalan sayfa eski sürümde kalır. index.html'deki app.js sürümü çalışandan farklıysa üstte "Yeni sürüm var · Yenile" şeridi çıkar.
    Kendiliğinden yenilemez (sayım yaparken bölmesin); dokununca yarım kalan rakamı kaydeder, sayfayı yeniler, kaldığın yerden devam edersin. */
 function guncellemeKontrol() {
@@ -481,11 +481,9 @@ function hesapPaneli() {
     <p class="note">Sabah 10:30'da SKT özeti, akşam 22:00'de unutulan irsaliye hatırlatması. iPhone'da önce uygulamayı ana ekrana ekleyin.</p>
     <div id="bdM" class="note"></div>
     <div class="btns"><button class="btn alt" id="bdAc">🔔 Bu telefonda bildirimleri aç</button></div>
-    ${admin() ? `<div class="sec">Test</div><label class="chk" style="padding:6px 0;border:0"><input type="checkbox" id="yeniAnaC" ${yeniAna() ? 'checked' : ''}> Yeni ana ekran (sadece yönetici hesabında görünür)</label>` : ''}
     <div class="btns"><button class="btn red" id="cik">Çıkış yap</button></div>
     <p class="note" style="text-align:center;margin:10px 0 0;font-size:12px">Sürüm ${SURUM}</p>`, el => {
     el.querySelector('#cik').onclick = () => { closeSheet(); signOut(auth); };
-    const ya = el.querySelector('#yeniAnaC'); if (ya) ya.onchange = () => { try { localStorage.setItem('env_yeniAna', ya.checked ? '1' : '0'); } catch (e) { } closeSheet(); setTab('sayim'); };
     el.querySelector('#bdAc').onclick = () => bildirimAc(el.querySelector('#bdM'));
     el.querySelector('#sKay').onclick = async () => {
       const a = el.querySelector('#s0').value, b = el.querySelector('#s1').value; const er = el.querySelector('#se');
@@ -963,9 +961,9 @@ function anaEkran() {
     : (ciftIrsTarihleri().length ? '<span class="pill r">Çift irsaliye</span>' : '') + (n.atik ? `<span class="pill r">${n.atik} atık</span>` : '') + (n.bugun ? `<span class="pill r">${n.bugun} bugün</span>` : '') + (n.yarin ? `<span class="pill a">${n.yarin} yarın</span>` : '') || '<span class="pill g">SKT\'si yaklaşan yok</span>';
   const spSt = !sp ? '<span class="pill a">Sevkiyat takvimi girilmemiş</span>' : sp.tarih === bg ? '<span class="pill b">Bugün sipariş günü</span>' : `<span class="pill">Sıradaki: ${GUNU[haftaGunu(sp.tarih)]} ${kisaT(sp.tarih)}</span>`;
   const eks = eksikIrsaliyeler(sb);
-  $('#app').innerHTML = ust('Envanter', { alt: trTarih(bg) }) + `<div class="pad ana-pad">
+  $('#app').innerHTML = ust('Envanter', { alt: subeIds().length > 1 ? trTarih(bg) : `${sb.ad} · ${trTarih(bg)}` }) /* tek şubeli hesapta şube düğmesi yok: şube adı alt satırda */ + `<div class="pad ana-pad">
     ${eks.length ? `<div class="uyari">${ikon('uyari', 's')}<div class="m"><b>${eks.map(o => trTarih(o.sevk)).join(', ')} sevkiyatının irsaliyesi girilmedi</b><span>SKT hesabı eksik kalır</span></div><button class="btn" id="irEkleA">Ekle</button></div>` : ''}
-    ${konumBos ? `<div class="card p"><b>Bu şubenin konumlarına henüz ürün eklenmemiş.</b><p class="note">Ayarlar → Şubeler bölümünden ekleyin.</p></div>` : ''}
+    ${konumBos ? `<div class="card p"><b>Bu şubenin konumlarına henüz ürün eklenmemiş.</b><p class="note">${admin() ? 'Ayarlar → Şubeler bölümünden ekleyin.' : 'Yöneticiye haber verin.'}</p></div>` : ''}
     ${kart({ k: 'gunluk', ikon: 'gun', renk: '#1d4ed8', b: 'Günlük Sayım', d: 'Seçili ürünler · her gün', st: sayimDurum('gunluk', gSy), sy: gSy, ana: !haftalikGunu })}
     ${kart({ k: 'haftalik', ikon: 'hafta', renk: '#15803d', b: 'Haftalık Sayım', d: `Bütün ürünler · ${GUNU[hg]} günleri`, st: sayimDurum('haftalik', hSy), sy: hSy, ana: haftalikGunu })}
     ${kart({ k: 'skt', ikon: 'skt', renk: '#c2410c', b: 'SKT Takibi', d: 'Son kullanma tarihleri · irsaliye ekle', st: sktSt })}
@@ -974,7 +972,10 @@ function anaEkran() {
     <div class="oktan"><span>powered by</span>${OKTAN}<b>OKTAN</b></div></div>`;
   bagla();
   const ir = $('#irEkleA'); if (ir) ir.onclick = () => { go({ tab: 'skt', ar: null }); irsaliyeEkle(); };
-  $('#akAyar').onclick = () => go({ tab: 'ayarlar', ar: null });
+  const ay = $('#akAyar'); let ayHazir = false, ayT = null;
+  ay.onclick = () => { // şube hesabında yanlışlıkla ayara girilmesin: iki dokunuş
+    if (!admin() && !ayHazir) { ayHazir = true; ay.classList.add('hazir'); ay.lastChild.textContent = 'Tekrar dokun'; clearTimeout(ayT); ayT = setTimeout(() => { ayHazir = false; ay.classList.remove('hazir'); ay.lastChild.textContent = 'Şube ayarları'; }, 2500); return; }
+    clearTimeout(ayT); go({ tab: 'ayarlar', ar: null }); };
   $('#akYardim').onclick = yardimPaneli;
   const sayimAc = async t => {
     if (konumBos || !kapsam(sb, t).length) { toast(`${TUR[t]} sayılacak ürün seçilmemiş.`, true); return; }
